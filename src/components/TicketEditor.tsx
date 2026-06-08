@@ -48,7 +48,7 @@ export function TicketEditor({ ocrResult, capturedImageUrl, prices, onReset }: T
     ocrResult.items.some((i) => i.materialName === mat.name && i.detectedWeight !== null)
   )
 
-  const { register, handleSubmit, control, getValues } = useForm<FormInput>({
+  const { register, handleSubmit, control } = useForm<FormInput>({
     defaultValues: {
         items: detectedMaterials.map((mat) => {
         const detected = ocrResult.items.find((i) => i.materialName === mat.name)
@@ -90,17 +90,16 @@ export function TicketEditor({ ocrResult, capturedImageUrl, prices, onReset }: T
     setIsPrinting(true)
     try {
       const printItems: PrintItem[] = data.items
-        .map((row) => {
+        .map((row): PrintItem | null => {
           const w = parseFloat(row.weight)
           const p = parseFloat(row.price)
           const mat = MATERIALS.find((m) => m.id === row.materialId)
           if (!mat || isNaN(w) || isNaN(p) || w <= 0 || p <= 0) return null
-          return { materialName: mat.name, weight: w, price: p, subtotal: w * p }
+          return { materialName: mat.name as string, weight: w, price: p, subtotal: w * p }
         })
         .filter((i): i is PrintItem => i !== null)
 
       await qzPrint({
-        businessName: 'CHATARRERÍA',
         items: printItems,
         total,
         date: new Date(),

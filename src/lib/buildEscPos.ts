@@ -54,14 +54,13 @@ export interface PrintItem {
 }
 
 export interface PrintTicketData {
-  businessName: string
   items: PrintItem[]
   total: number
   date: Date
 }
 
 export function buildEscPos(data: PrintTicketData): string[] {
-  const { businessName, items, total, date } = data
+  const { items, total, date } = data
 
   const dateStr = date.toLocaleDateString('es-AR', {
     day: '2-digit', month: '2-digit', year: 'numeric',
