@@ -6,7 +6,7 @@ export function useCamera() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [status, setStatus] = useState<CameraStatus>('idle')
   const [error, setError] = useState<string | null>(null)
-  const [rotated, setRotated] = useState(false)
+  const [rotated, setRotated] = useState(() => localStorage.getItem('camRotated') === 'true')
   const streamRef = useRef<MediaStream | null>(null)
 
   const start = useCallback(async () => {
@@ -53,6 +53,8 @@ export function useCamera() {
     }
     return canvas.toDataURL('image/jpeg', 0.85)
   }, [rotated])
+
+  useEffect(() => { localStorage.setItem('camRotated', String(rotated)) }, [rotated])
 
   const toggleRotation = useCallback(() => setRotated((r) => !r), [])
 
