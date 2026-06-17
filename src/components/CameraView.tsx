@@ -4,16 +4,17 @@ import { useGroqOcr } from '@/hooks/useGroqOcr'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
-import { Camera, ScanLine, RefreshCw, Loader2 } from 'lucide-react'
+import { Camera, ScanLine, RefreshCw, Loader2, ClipboardList, RotateCw } from 'lucide-react'
 import { toast } from 'sonner'
 import type { OcrResult } from '@/types/ticket'
 
 interface CameraViewProps {
   onResult: (imageUrl: string, result: OcrResult) => void
+  onManual: () => void
 }
 
-export function CameraView({ onResult }: CameraViewProps) {
-  const { videoRef, status: camStatus, error: camError, start, stop, capture } = useCamera()
+export function CameraView({ onResult, onManual }: CameraViewProps) {
+  const { videoRef, status: camStatus, error: camError, start, stop, capture, rotated, toggleRotation } = useCamera()
   const { status: ocrStatus, result, progress, recognize, reset } = useGroqOcr()
   const capturedUrlRef = useRef<string>('')
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
@@ -64,7 +65,7 @@ export function CameraView({ onResult }: CameraViewProps) {
         <CardContent className="p-0 relative">
           <video
             ref={videoRef}
-            className="w-full rounded-lg bg-muted aspect-video object-cover"
+            className={`w-full rounded-lg bg-muted aspect-video object-cover transition-transform duration-300 ${rotated ? 'rotate-180' : ''}`}
             muted
             playsInline
           />
@@ -92,7 +93,7 @@ export function CameraView({ onResult }: CameraViewProps) {
       )}
 
       {/* Acciones */}
-      <div className="flex gap-3">
+      <div className="flex gap-3 flex-wrap justify-center">
         <Button
           size="lg"
           onClick={handleCapture}
@@ -107,6 +108,13 @@ export function CameraView({ onResult }: CameraViewProps) {
             Repetir
           </Button>
         )}
+        <Button variant="outline" size="icon" onClick={toggleRotation} title="Rotar 180°">
+          <RotateCw className={`size-4 transition-transform ${rotated ? 'rotate-180 text-primary' : ''}`} />
+        </Button>
+        <Button variant="outline" size="lg" onClick={onManual}>
+          <ClipboardList className="size-4 mr-2" />
+          Boleta manual
+        </Button>
       </div>
     </div>
   )

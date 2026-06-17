@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Printer, RotateCcw, CheckCircle2, ChevronDown, ChevronUp,
-  Wifi, WifiOff, Loader2, Trash2, Plus,
+  Wifi, WifiOff, Loader2, Trash2, Plus, ClipboardList,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { OcrResult } from '@/types/ticket'
@@ -115,21 +115,28 @@ export function TicketEditor({ ocrResult, capturedImageUrl, prices, onReset }: T
     }
   }
 
+  const isManual = ocrResult.items.length === 0 && !capturedImageUrl
+
   return (
     <div className="flex flex-col gap-6 w-full max-w-2xl mx-auto p-4">
       {/* Encabezado */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <CheckCircle2 className="size-5 text-green-600" />
-          <h1 className="text-xl font-semibold">Ticket digital</h1>
-          <Badge variant="secondary">Revisión</Badge>
+          {isManual
+            ? <ClipboardList className="size-5 text-blue-500" />
+            : <CheckCircle2 className="size-5 text-green-600" />
+          }
+          <h1 className="text-xl font-semibold">
+            {isManual ? 'Boleta manual' : 'Ticket digital'}
+          </h1>
+          {!isManual && <Badge variant="secondary">Revisión</Badge>}
           <Badge variant="outline">
             {fields.length} material{fields.length !== 1 ? 'es' : ''}
           </Badge>
         </div>
         <Button variant="outline" size="sm" onClick={onReset}>
           <RotateCcw className="size-3.5 mr-1.5" />
-          Nuevo escaneo
+          {isManual ? 'Volver' : 'Nuevo escaneo'}
         </Button>
       </div>
 
@@ -149,58 +156,65 @@ export function TicketEditor({ ocrResult, capturedImageUrl, prices, onReset }: T
       <form onSubmit={handleSubmit(onSubmit)}>
         <Card>
           <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Material</TableHead>
-                  <TableHead>Peso (kg)</TableHead>
-                  <TableHead>Precio ($)</TableHead>
-                  <TableHead className="text-right">Subtotal</TableHead>
-                  <TableHead className="w-10" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {fields.map((field, idx) => {
-                  const mat = MATERIALS.find((m) => m.id === field.materialId)
-                  return (
-                    <TableRow key={field.id}>
-                      <TableCell className="font-medium">{mat?.name ?? field.materialId}</TableCell>
-                      <TableCell>
-                        <Input
-                          {...register(`items.${idx}.weight`)}
-                          type="number"
-                          step="0.01"
-                          placeholder="—"
-                          className="w-28 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          {...register(`items.${idx}.price`)}
-                          type="number"
-                          step="0.01"
-                          placeholder="—"
-                          className="w-28 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                        />
-                      </TableCell>
-                      <TableCell className="text-right font-medium tabular-nums">
-                        {subtotals[idx] !== null ? `$ ${fmt(subtotals[idx]!)}` : '—'}
-                      </TableCell>
-                      <TableCell>
-                        <button
-                          type="button"
-                          onClick={() => remove(idx)}
-                          className="p-1 text-muted-foreground hover:text-destructive transition-colors"
-                          aria-label="Eliminar material"
-                        >
-                          <Trash2 className="size-4" />
-                        </button>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
+            {fields.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 gap-2 text-muted-foreground">
+                <ClipboardList className="size-8 opacity-30" />
+                <p className="text-sm">Agregá materiales con el selector de abajo</p>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Material</TableHead>
+                    <TableHead>Peso (kg)</TableHead>
+                    <TableHead>Precio ($)</TableHead>
+                    <TableHead className="text-right">Subtotal</TableHead>
+                    <TableHead className="w-10" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {fields.map((field, idx) => {
+                    const mat = MATERIALS.find((m) => m.id === field.materialId)
+                    return (
+                      <TableRow key={field.id}>
+                        <TableCell className="font-medium">{mat?.name ?? field.materialId}</TableCell>
+                        <TableCell>
+                          <Input
+                            {...register(`items.${idx}.weight`)}
+                            type="number"
+                            step="0.01"
+                            placeholder="—"
+                            className="w-28 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            {...register(`items.${idx}.price`)}
+                            type="number"
+                            step="0.01"
+                            placeholder="—"
+                            className="w-28 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                          />
+                        </TableCell>
+                        <TableCell className="text-right font-medium tabular-nums">
+                          {subtotals[idx] !== null ? `$ ${fmt(subtotals[idx]!)}` : '—'}
+                        </TableCell>
+                        <TableCell>
+                          <button
+                            type="button"
+                            onClick={() => remove(idx)}
+                            className="p-1 text-muted-foreground hover:text-destructive transition-colors"
+                            aria-label="Eliminar material"
+                          >
+                            <Trash2 className="size-4" />
+                          </button>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
 

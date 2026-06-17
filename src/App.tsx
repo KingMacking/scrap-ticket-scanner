@@ -24,6 +24,12 @@ function App() {
     setView('ticket')
   }
 
+  const handleManual = () => {
+    setCapturedImageUrl(null)
+    setOcrResult({ items: [], rawText: '' })
+    setView('ticket')
+  }
+
   const handleReset = () => {
     setCapturedImageUrl(null)
     setOcrResult(null)
@@ -51,7 +57,7 @@ function App() {
           </div>
         )}
         {view === 'camera' && (
-          <CameraView onResult={handleOcrResult} />
+          <CameraView onResult={handleOcrResult} onManual={handleManual} />
         )}
         {view === 'ticket' && ocrResult && (
           <TicketEditor
