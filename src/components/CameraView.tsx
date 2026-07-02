@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useCamera } from '@/hooks/useCamera'
-import { useGroqOcr } from '@/hooks/useGroqOcr'
+import { useGeminiOcr } from '@/hooks/useGeminiOcr'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
@@ -15,7 +15,7 @@ interface CameraViewProps {
 
 export function CameraView({ onResult, onManual }: CameraViewProps) {
   const { videoRef, status: camStatus, error: camError, start, stop, capture, rotated, toggleRotation } = useCamera()
-  const { status: ocrStatus, result, progress, recognize, reset } = useGroqOcr()
+  const { status: ocrStatus, result, progress, recognize, reset } = useGeminiOcr()
   const capturedUrlRef = useRef<string>('')
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
 
