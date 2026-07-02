@@ -13,8 +13,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { OcrResult } from '@/types/ticket'
-import { MATERIALS } from '@/data/materials'
-import type { PricesMap } from '@/hooks/usePrices'
+import type { PricesMap, MaterialInfo } from '@/hooks/usePrices'
 import { useQzTray } from '@/hooks/useQzTray'
 import type { PrintItem } from '@/lib/buildEscPos'
 
@@ -32,19 +31,20 @@ interface TicketEditorProps {
   ocrResult: OcrResult
   capturedImageUrl: string | null
   prices: PricesMap
+  allMaterials: MaterialInfo[]
   onReset: () => void
 }
 
 const fmt = (n: number) =>
   Math.round(n).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
 
-export function TicketEditor({ ocrResult, capturedImageUrl, prices, onReset }: TicketEditorProps) {
+export function TicketEditor({ ocrResult, capturedImageUrl, prices, allMaterials, onReset }: TicketEditorProps) {
   const [showRawText, setShowRawText] = useState(false)
   const [isPrinting, setIsPrinting] = useState(false)
   const { status: qzStatus, print: qzPrint, connect: qzConnect } = useQzTray()
 
   // Materiales detectados por el OCR como filas iniciales
-  const detectedMaterials = MATERIALS.filter((mat) =>
+  const detectedMaterials = allMaterials.filter((mat) =>
     ocrResult.items.some((i) => i.materialName === mat.name && i.detectedWeight !== null)
   )
 
@@ -74,10 +74,10 @@ export function TicketEditor({ ocrResult, capturedImageUrl, prices, onReset }: T
 
   // Materiales que todavía no están en la lista
   const usedIds = new Set(watchedItems.map((i) => i?.materialId))
-  const availableToAdd = MATERIALS.filter((m) => !usedIds.has(m.id))
+  const availableToAdd = allMaterials.filter((m) => !usedIds.has(m.id))
 
   const handleAddMaterial = (materialId: string) => {
-    const mat = MATERIALS.find((m) => m.id === materialId)
+    const mat = allMaterials.find((m) => m.id === materialId)
     if (!mat) return
     append({
       materialId: mat.id,
@@ -93,7 +93,7 @@ export function TicketEditor({ ocrResult, capturedImageUrl, prices, onReset }: T
         .map((row): PrintItem | null => {
           const w = parseFloat(row.weight)
           const p = parseFloat(row.price)
-          const mat = MATERIALS.find((m) => m.id === row.materialId)
+          const mat = allMaterials.find((m) => m.id === row.materialId)
           if (!mat || isNaN(w) || isNaN(p) || w <= 0 || p <= 0) return null
           return { materialName: mat.name as string, weight: w, price: p, subtotal: w * p }
         })
@@ -174,7 +174,7 @@ export function TicketEditor({ ocrResult, capturedImageUrl, prices, onReset }: T
                 </TableHeader>
                 <TableBody>
                   {fields.map((field, idx) => {
-                    const mat = MATERIALS.find((m) => m.id === field.materialId)
+                    const mat = allMaterials.find((m) => m.id === field.materialId)
                     return (
                       <TableRow key={field.id}>
                         <TableCell className="font-medium">{mat?.name ?? field.materialId}</TableCell>

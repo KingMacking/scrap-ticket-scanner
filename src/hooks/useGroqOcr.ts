@@ -52,7 +52,7 @@ export function useGroqOcr() {
       setProgress(30)
 
       const body = {
-        model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+        model: 'qwen/qwen3.6-27b',
         messages: [
           {
             role: 'user',
@@ -93,7 +93,7 @@ export function useGroqOcr() {
       const text: string = data.choices?.[0]?.message?.content ?? ''
       console.log('[Groq raw response]', text)
 
-      const clean = text.replace(/```(?:json)?/g, '').replace(/```/g, '').trim()
+      const clean = text.replace(/<think>[\s\S]*?<\/think>/g, '').replace(/```(?:json)?/g, '').replace(/```/g, '').trim()
       const rows: OcrRow[] = JSON.parse(clean)
       const ocrResult = buildOcrResult(rows)
       console.log('[Groq parsed items]', ocrResult.items)

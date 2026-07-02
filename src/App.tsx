@@ -16,7 +16,7 @@ function App() {
   const [capturedImageUrl, setCapturedImageUrl] = useState<string | null>(null)
   const [ocrResult, setOcrResult] = useState<OcrResult | null>(null)
   const [prevView, setPrevView] = useState<AppView>('camera')
-  const { prices, saveAll } = usePrices()
+  const { prices, allMaterials, saveAll, addMaterial, removeMaterial } = usePrices()
 
   const handleOcrResult = (imageUrl: string, result: OcrResult) => {
     setCapturedImageUrl(imageUrl)
@@ -64,13 +64,17 @@ function App() {
             ocrResult={ocrResult}
             capturedImageUrl={capturedImageUrl}
             prices={prices}
+            allMaterials={allMaterials}
             onReset={handleReset}
           />
         )}
         {view === 'settings' && (
           <PriceManager
             prices={prices}
+            allMaterials={allMaterials}
             onSave={saveAll}
+            onAddMaterial={addMaterial}
+            onRemoveMaterial={removeMaterial}
             onBack={closeSettings}
           />
         )}

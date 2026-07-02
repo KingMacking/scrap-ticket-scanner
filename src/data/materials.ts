@@ -22,4 +22,5 @@ export const MATERIALS = [
   { id: '15', name: 'Aluminio duro',  defaultPrice: 1300,  aliases: ['aluminio duro', 'alum duro', 'alumduro'],               orderIndex: 15 },
   { id: '16', name: 'Latita',         defaultPrice: 1300,  aliases: ['latita', 'lata', 'latitas'],                            orderIndex: 16 },
   { id: '17', name: 'Acero',          defaultPrice: 300,   aliases: ['acero', 'acera', 'acer'],                               orderIndex: 17 },
+  { id: '18', name: 'Mezcla',         defaultPrice: 160,   aliases: ['mezcla'],                                                orderIndex: 18 },
 ] as const
