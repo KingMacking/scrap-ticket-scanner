@@ -2,13 +2,15 @@ import { useState, useCallback } from 'react'
 import type { OcrResult, OcrStatus } from '@/types/ticket'
 import { MATERIALS } from '@/data/materials'
 
-const PROMPT = `This image contains a handwritten table with two columns: MATERIAL and PESO (weight).
-Extract all rows that have both a material name and a numeric weight.
+const PROMPT = `You are an OCR assistant. Extract rows from a handwritten table with columns MATERIAL and PESO (weight in kg).
 
-Respond ONLY with a valid JSON array, no markdown, no explanation. Format:
-[{"material": "COBRE", "weight": 200}, {"material": "HIERRO", "weight": 150}]
+Rules:
+- Return ONLY a valid JSON array, no other text.
+- Each entry: {"material": "exact name as written", "weight": number}
+- Skip rows without a weight number.
+- Use the exact material name from the image, do not translate or normalize.
 
-Use the exact material name as written in the image. If a row has no weight, skip it.`
+Example: [{"material": "COBRE", "weight": 200}, {"material": "HIERRO", "weight": 150}]`
 
 function matchMaterial(raw: string): string {
   const lower = raw.toLowerCase()
@@ -68,7 +70,8 @@ export function useGroqOcr() {
             ],
           },
         ],
-        temperature: 0,
+        temperature: 0.2,
+        reasoning_effort: 'none',
       }
 
       const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -93,8 +96,11 @@ export function useGroqOcr() {
       const text: string = data.choices?.[0]?.message?.content ?? ''
       console.log('[Groq raw response]', text)
 
-      const clean = text.replace(/<think>[\s\S]*?<\/think>/g, '').replace(/```(?:json)?/g, '').replace(/```/g, '').trim()
-      const rows: OcrRow[] = JSON.parse(clean)
+      const stripped = text.replace(/<think>[\s\S]*?<\/think>/g, '').replace(/```(?:json)?/g, '').replace(/```/g, '').trim()
+      const start = stripped.indexOf('[')
+      const end = stripped.lastIndexOf(']')
+      const json = start !== -1 && end !== -1 ? stripped.slice(start, end + 1) : stripped
+      const rows: OcrRow[] = JSON.parse(json)
       const ocrResult = buildOcrResult(rows)
       console.log('[Groq parsed items]', ocrResult.items)
 
