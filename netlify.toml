@@ -1,0 +1,11 @@
+[build]
+  command = "pnpm run build"
+  publish = "dist"
+
+[functions]
+  directory = "netlify/functions"
+
+[[redirects]]
+  from = "/api/cloudflare-ocr"
+  to = "/.netlify/functions/cloudflare-ocr"
+  status = 200

@@ -16,6 +16,15 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  server: {
+    proxy: {
+      '/api/cf': {
+        target: 'https://api.cloudflare.com/client/v4',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/cf/, ''),
+      },
+    },
+  },
   build: {
     chunkSizeWarningLimit: 1000,
   },
