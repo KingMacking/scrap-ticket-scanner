@@ -54,7 +54,7 @@ export function useGroqOcr() {
       setProgress(30)
 
       const body = {
-        model: 'qwen/qwen3.6-27b',
+        model: 'meta-llama/llama-4-scout-17b-16e-instruct',
         messages: [
           {
             role: 'user',
@@ -70,8 +70,7 @@ export function useGroqOcr() {
             ],
           },
         ],
-        temperature: 0.2,
-        reasoning_effort: 'none',
+        temperature: 0,
       }
 
       const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
