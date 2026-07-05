@@ -32,15 +32,28 @@ function divider(char = '-'): string {
   return line(char.repeat(COLS))
 }
 
-/** Rellena con espacios para alinear dos columnas en una línea de COLS chars */
-function row(left: string, right: string, width = COLS): string {
-  const spaces = Math.max(1, width - left.length - right.length)
-  return line(left + ' '.repeat(spaces) + right)
+/** Tres columnas: izquierda, centro (alineado a la derecha), derecha */
+function row3(left: string, mid: string, right: string): string {
+  const midW = 8
+  const rightW = 14
+  const leftW = COLS - midW - rightW - 2
+  const truncated = left.length > leftW ? left.slice(0, leftW - 1) + '…' : left
+  const midPad = Math.max(1, midW - mid.length)
+  const rightPad = Math.max(1, rightW - right.length)
+  return line(truncated + ' '.repeat(leftW - truncated.length + 1) + ' '.repeat(midPad) + mid + ' '.repeat(rightPad) + right)
 }
 
 /** Formatea número como moneda argentina sin decimales */
 function fmt(n: number): string {
   return '$ ' + Math.round(n).toLocaleString('es-AR', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  })
+}
+
+/** Formatea número como entero sin signo monetario */
+function fmtNum(n: number): string {
+  return Math.round(n).toLocaleString('es-AR', {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   })
@@ -84,14 +97,13 @@ export function buildEscPos(data: PrintTicketData): string[] {
 
   // Cabecera de columnas
   push(CMD.BOLD_ON)
-  push(row('MATERIAL', 'SUBTOTAL'))
+  push(row3('MATERIAL', '$/KG', 'TOTAL'))
   push(CMD.BOLD_OFF)
   push(divider('-'))
 
   // Filas de materiales
   for (const item of items) {
-    const matLine = `${item.materialName} (${item.weight} kg)`
-    push(row(matLine, fmt(item.subtotal)))
+    push(row3(`${item.materialName} (${item.weight} kg)`, fmtNum(item.price), fmt(item.subtotal)))
   }
 
   push(divider('='))

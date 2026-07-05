@@ -12,7 +12,7 @@ import {
   Wifi, WifiOff, Loader2, Trash2, Plus, ClipboardList,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import type { OcrResult } from '@/types/ticket'
+import type { OcrResult, TicketItem } from '@/types/ticket'
 import type { PricesMap, MaterialInfo } from '@/hooks/usePrices'
 import { useQzTray } from '@/hooks/useQzTray'
 import type { PrintItem } from '@/lib/buildEscPos'
@@ -32,33 +32,45 @@ interface TicketEditorProps {
   capturedImageUrl: string | null
   prices: PricesMap
   allMaterials: MaterialInfo[]
+  defaultMaterialIds?: string[]
   onReset: () => void
+  onSave?: (items: TicketItem[], total: number) => Promise<string | null>
+  onMarkPrinted?: (ticketId: string) => Promise<void>
 }
 
 const fmt = (n: number) =>
   Math.round(n).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
 
-export function TicketEditor({ ocrResult, capturedImageUrl, prices, allMaterials, onReset }: TicketEditorProps) {
+export function TicketEditor({ ocrResult, capturedImageUrl, prices, allMaterials, defaultMaterialIds, onReset, onSave, onMarkPrinted }: TicketEditorProps) {
   const [showRawText, setShowRawText] = useState(false)
   const [isPrinting, setIsPrinting] = useState(false)
+  const [savedTicketId, setSavedTicketId] = useState<string | null>(null)
   const { status: qzStatus, print: qzPrint, connect: qzConnect } = useQzTray()
 
-  // Materiales detectados por el OCR como filas iniciales
-  const detectedMaterials = allMaterials.filter((mat) =>
-    ocrResult.items.some((i) => i.materialName === mat.name && i.detectedWeight !== null)
-  )
+  const isManual = ocrResult.items.length === 0 && !capturedImageUrl
 
-  const { register, handleSubmit, control } = useForm<FormInput>({
-    defaultValues: {
-        items: detectedMaterials.map((mat) => {
-        const detected = ocrResult.items.find((i) => i.materialName === mat.name)
-        return {
-          materialId: mat.id,
-          weight: detected?.detectedWeight?.toString() ?? '',
-          price: prices[mat.name]?.toString() ?? '',
-        }
-      }),
-    },
+  // Materiales que aparecen como filas iniciales
+  const detectedMaterials = isManual && defaultMaterialIds
+    ? defaultMaterialIds
+        .map((id) => allMaterials.find((mat) => mat.id === id))
+        .filter((mat): mat is MaterialInfo => mat !== undefined)
+    : allMaterials.filter((mat) =>
+        ocrResult.items.some((i) => i.materialName === mat.name && i.detectedWeight !== null)
+      )
+
+  const buildDefaultValues = () => ({
+    items: detectedMaterials.map((mat) => {
+      const detected = ocrResult.items.find((i) => i.materialName === mat.name && i.detectedWeight !== null)
+      return {
+        materialId: mat.id,
+        weight: detected?.detectedWeight?.toString() ?? '',
+        price: prices[mat.name]?.toString() ?? '',
+      }
+    }),
+  })
+
+  const { register, handleSubmit, control, reset } = useForm<FormInput>({
+    defaultValues: buildDefaultValues(),
   })
 
   const { fields, append, remove } = useFieldArray({ control, name: 'items' })
@@ -89,23 +101,46 @@ export function TicketEditor({ ocrResult, capturedImageUrl, prices, allMaterials
   const onSubmit = async (data: FormInput) => {
     setIsPrinting(true)
     try {
-      const printItems: PrintItem[] = data.items
-        .map((row): PrintItem | null => {
-          const w = parseFloat(row.weight)
-          const p = parseFloat(row.price)
-          const mat = allMaterials.find((m) => m.id === row.materialId)
-          if (!mat || isNaN(w) || isNaN(p) || w <= 0 || p <= 0) return null
-          return { materialName: mat.name as string, weight: w, price: p, subtotal: w * p }
-        })
-        .filter((i): i is PrintItem => i !== null)
+      const items = buildTicketItems(data)
+      if (items.length === 0) {
+        toast.error('Agregá al menos un material válido')
+        setIsPrinting(false)
+        return
+      }
 
+      const printItems: PrintItem[] = items.map((i) => ({
+        materialName: i.materialName,
+        weight: i.correctedWeight ?? 0,
+        price: i.price ?? 0,
+        subtotal: (i.correctedWeight ?? 0) * (i.price ?? 0),
+      }))
+
+      // 1. Save if not already saved
+      let ticketId = savedTicketId
+      if (!ticketId && onSave) {
+        ticketId = await onSave(items, total)
+        if (ticketId) setSavedTicketId(ticketId)
+      }
+
+      // 2. Print
       await qzPrint({
         items: printItems,
         total,
         date: new Date(),
       })
 
-      toast.success('Ticket enviado a imprimir')
+      // 3. Mark as printed
+      if (ticketId && onMarkPrinted) {
+        await onMarkPrinted(ticketId)
+      }
+
+      toast.success('Ticket guardado e impreso')
+
+      // En boleta manual: resetear el formulario con los materiales predeterminados
+      if (isManual) {
+        reset()
+        setSavedTicketId(null)
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error al imprimir'
       toast.error(msg)
@@ -115,7 +150,22 @@ export function TicketEditor({ ocrResult, capturedImageUrl, prices, allMaterials
     }
   }
 
-  const isManual = ocrResult.items.length === 0 && !capturedImageUrl
+  const buildTicketItems = (data: FormInput): TicketItem[] =>
+    data.items
+      .map((row): TicketItem | null => {
+        const w = parseFloat(row.weight)
+        const p = parseFloat(row.price)
+        const mat = allMaterials.find((m) => m.id === row.materialId)
+        if (!mat || isNaN(w) || isNaN(p) || w <= 0 || p <= 0) return null
+        return {
+          id: '',
+          materialName: mat.name,
+          detectedWeight: null,
+          correctedWeight: w,
+          price: p,
+        }
+      })
+      .filter((i): i is TicketItem => i !== null)
 
   return (
     <div className="flex flex-col gap-6 w-full max-w-2xl mx-auto p-4">
@@ -167,7 +217,7 @@ export function TicketEditor({ ocrResult, capturedImageUrl, prices, allMaterials
                   <TableRow>
                     <TableHead>Material</TableHead>
                     <TableHead>Peso (kg)</TableHead>
-                    <TableHead>Precio ($)</TableHead>
+                    <TableHead>Precio ($/kg)</TableHead>
                     <TableHead className="text-right">Subtotal</TableHead>
                     <TableHead className="w-10" />
                   </TableRow>
@@ -228,7 +278,7 @@ export function TicketEditor({ ocrResult, capturedImageUrl, prices, allMaterials
               onChange={(e) => { if (e.target.value) handleAddMaterial(e.target.value) }}
             >
               <option value="" disabled>Agregar material...</option>
-              {availableToAdd.map((m) => (
+              {[...availableToAdd].sort((a, b) => a.name.localeCompare(b.name)).map((m) => (
                 <option key={m.id} value={m.id}>{m.name}</option>
               ))}
             </select>
@@ -245,30 +295,38 @@ export function TicketEditor({ ocrResult, capturedImageUrl, prices, allMaterials
 
         {/* Acciones */}
         <div className="flex justify-between items-center mt-6">
-          {/* Indicador QZ Tray */}
-          <div className="flex items-center gap-1.5 text-xs">
-            {qzStatus === 'connected' && (
-              <><Wifi className="size-3.5 text-green-600" /><span className="text-green-600">Impresora conectada</span></>
+          <div className="flex items-center gap-2">
+            {savedTicketId && (
+              <span className="text-xs text-green-600 font-medium flex items-center gap-1">
+                <CheckCircle2 className="size-3.5" />
+                Guardado
+              </span>
             )}
-            {qzStatus === 'connecting' && (
-              <><Loader2 className="size-3.5 animate-spin text-muted-foreground" /><span className="text-muted-foreground">Conectando...</span></>
-            )}
-            {(qzStatus === 'disconnected' || qzStatus === 'error') && (
-              <button
-                type="button"
-                onClick={qzConnect}
-                className="flex items-center gap-1.5 text-destructive hover:underline"
-              >
-                <WifiOff className="size-3.5" />
-                <span>QZ Tray sin conexión — reintentar</span>
-              </button>
-            )}
+            {/* Indicador QZ Tray */}
+            <div className="flex items-center gap-1.5 text-xs">
+              {qzStatus === 'connected' && (
+                <><Wifi className="size-3.5 text-green-600" /><span className="text-green-600">Impresora conectada</span></>
+              )}
+              {qzStatus === 'connecting' && (
+                <><Loader2 className="size-3.5 animate-spin text-muted-foreground" /><span className="text-muted-foreground">Conectando...</span></>
+              )}
+              {(qzStatus === 'disconnected' || qzStatus === 'error') && (
+                <button
+                  type="button"
+                  onClick={qzConnect}
+                  className="flex items-center gap-1.5 text-destructive hover:underline"
+                >
+                  <WifiOff className="size-3.5" />
+                  <span>QZ Tray sin conexión — reintentar</span>
+                </button>
+              )}
+            </div>
           </div>
 
           <Button type="submit" size="lg" disabled={isPrinting}>
             {isPrinting
               ? <><Loader2 className="size-4 mr-2 animate-spin" />Imprimiendo...</>
-              : <><Printer className="size-4 mr-2" />Imprimir ticket</>
+              : <><Printer className="size-4 mr-2" />Imprimir y guardar</>
             }
           </Button>
         </div>

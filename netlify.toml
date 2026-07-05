@@ -9,3 +9,8 @@
   from = "/api/cloudflare-ocr"
   to = "/.netlify/functions/cloudflare-ocr"
   status = 200
+
+[[redirects]]
+  from = "/api/gemini-ocr"
+  to = "/.netlify/functions/gemini-ocr"
+  status = 200

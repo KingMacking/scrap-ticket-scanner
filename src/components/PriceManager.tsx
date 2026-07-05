@@ -10,13 +10,20 @@ import type { PricesMap, MaterialInfo } from '@/hooks/usePrices'
 interface PriceManagerProps {
   prices: PricesMap
   allMaterials: MaterialInfo[]
+  defaultMaterialOrders: Record<string, number>
   onSave: (prices: PricesMap) => void
   onAddMaterial: (name: string) => void
   onRemoveMaterial: (name: string) => void
+  onSetDefaultMaterialOrders: (orders: Record<string, number>) => void
   onBack: () => void
 }
 
-export function PriceManager({ prices, allMaterials, onSave, onAddMaterial, onRemoveMaterial, onBack }: PriceManagerProps) {
+function nextOrder(orders: Record<string, number>): number {
+  const vals = Object.values(orders)
+  return vals.length > 0 ? Math.max(...vals) + 1 : 1
+}
+
+export function PriceManager({ prices, allMaterials, defaultMaterialOrders, onSave, onAddMaterial, onRemoveMaterial, onSetDefaultMaterialOrders, onBack }: PriceManagerProps) {
   const [draft, setDraft] = useState<Record<string, string>>(() =>
     Object.fromEntries(
       allMaterials.map((mat) => [mat.name, prices[mat.name]?.toString() ?? ''])
@@ -27,6 +34,22 @@ export function PriceManager({ prices, allMaterials, onSave, onAddMaterial, onRe
 
   const handleChange = (name: string, value: string) => {
     setDraft((prev) => ({ ...prev, [name]: value }))
+  }
+
+  const toggleDefault = (name: string) => {
+    const next = { ...defaultMaterialOrders }
+    if (name in next) {
+      delete next[name]
+    } else {
+      next[name] = nextOrder(next)
+    }
+    onSetDefaultMaterialOrders(next)
+  }
+
+  const changeOrder = (name: string, value: string) => {
+    const num = parseInt(value, 10)
+    if (isNaN(num) || num < 1) return
+    onSetDefaultMaterialOrders({ ...defaultMaterialOrders, [name]: num })
   }
 
   const handleSave = () => {
@@ -78,7 +101,7 @@ export function PriceManager({ prices, allMaterials, onSave, onAddMaterial, onRe
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm text-muted-foreground">
-            Estos precios se usarán como valor predeterminado al escanear un ticket.
+            Marcá con ✓ los materiales que aparecen en la boleta manual y asignales un orden.
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
@@ -86,43 +109,66 @@ export function PriceManager({ prices, allMaterials, onSave, onAddMaterial, onRe
             <TableHeader>
               <TableRow>
                 <TableHead>Material</TableHead>
-                <TableHead>Precio ($ / kg)</TableHead>
+                <TableHead className="text-center w-14">Predet.</TableHead>
+                <TableHead className="text-center w-16">Orden</TableHead>
+                <TableHead>Precio ($/kg)</TableHead>
                 <TableHead className="w-10" />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {allMaterials.map((mat) => (
-                <TableRow key={mat.id}>
-                  <TableCell className="font-medium">
-                    {mat.name}
-                    {mat.isCustom && <span className="ml-1.5 text-xs text-muted-foreground">(personalizado)</span>}
-                  </TableCell>
-                  <TableCell>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      placeholder="—"
-                      className="w-32 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                      value={draft[mat.name]}
-                      onChange={(e) => handleChange(mat.name, e.target.value)}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onRemoveMaterial(mat.name)
-                        toast.success(`"${mat.name}" eliminado`)
-                      }}
-                      className="p-1 text-muted-foreground hover:text-destructive transition-colors"
-                      aria-label={`Eliminar ${mat.name}`}
-                    >
-                      <Trash2 className="size-4" />
-                    </button>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {allMaterials.map((mat) => {
+                const isDefault = mat.name in defaultMaterialOrders
+                return (
+                  <TableRow key={mat.id}>
+                    <TableCell className="font-medium">
+                      {mat.name}
+                      {mat.isCustom && <span className="ml-1.5 text-xs text-muted-foreground">(personalizado)</span>}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <input
+                        type="checkbox"
+                        checked={isDefault}
+                        onChange={() => toggleDefault(mat.name)}
+                        className="size-4 accent-primary cursor-pointer"
+                      />
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <input
+                        type="number"
+                        min="1"
+                        value={isDefault ? defaultMaterialOrders[mat.name] : ''}
+                        disabled={!isDefault}
+                        onChange={(e) => changeOrder(mat.name, e.target.value)}
+                        className={`w-14 text-center text-sm border rounded-md px-1 py-1 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${!isDefault ? 'opacity-30' : ''}`}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="—"
+                        className="w-28 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                        value={draft[mat.name]}
+                        onChange={(e) => handleChange(mat.name, e.target.value)}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onRemoveMaterial(mat.name)
+                          toast.success(`"${mat.name}" eliminado`)
+                        }}
+                        className="p-1 text-muted-foreground hover:text-destructive transition-colors"
+                        aria-label={`Eliminar ${mat.name}`}
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
             </TableBody>
           </Table>
         </CardContent>

@@ -64,11 +64,15 @@ export function useGeminiOcr() {
   const [progress, setProgress] = useState(0)
 
   const recognize = useCallback(async (imageDataUrl: string) => {
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined
-    if (!apiKey) {
-      console.error('[Gemini] Falta VITE_GEMINI_API_KEY en .env')
-      setStatus('error')
-      return
+    const isProd = import.meta.env.PROD
+
+    if (!isProd) {
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined
+      if (!apiKey) {
+        console.error('[Gemini] Falta VITE_GEMINI_API_KEY en .env')
+        setStatus('error')
+        return
+      }
     }
 
     setStatus('processing')
@@ -78,27 +82,41 @@ export function useGeminiOcr() {
     try {
       setProgress(30)
       const resized = await resizeImage(imageDataUrl)
-      const base64 = resized.split(',')[1]
-      const mimeType = resized.split(';')[0].replace('data:', '')
 
-      const body = {
-        contents: [{
-          parts: [
-            { inline_data: { mime_type: mimeType, data: base64 } },
-            { text: PROMPT },
-          ],
-        }],
-        generationConfig: {
-          temperature: 0,
-          response_mime_type: 'application/json',
-          thinkingConfig: { thinkingBudget: 0 },
-        },
+      setProgress(60)
+
+      let res: Response
+      if (isProd) {
+        res = await fetch('/api/gemini-ocr', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageDataUrl: resized }),
+        })
+      } else {
+        const base64 = resized.split(',')[1]
+        const mimeType = resized.split(';')[0].replace('data:', '')
+        const apiKey = import.meta.env.VITE_GEMINI_API_KEY
+
+        res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{
+                parts: [
+                  { inline_data: { mime_type: mimeType, data: base64 } },
+                  { text: PROMPT },
+                ],
+              }],
+              generationConfig: {
+                temperature: 0,
+                response_mime_type: 'application/json',
+              },
+            }),
+          }
+        )
       }
-
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`,
-        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
-      )
 
       setProgress(80)
 

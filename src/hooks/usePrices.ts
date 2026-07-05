@@ -3,6 +3,17 @@ import { MATERIALS } from '@/data/materials'
 
 const PRICES_KEY = 'scrap-prices-v2'
 const CUSTOM_KEY = 'scrap-custom-materials-v2'
+const DEFAULTS_KEY = 'scrap-default-materials-v2'
+
+const DEFAULT_ORDERS: Record<string, number> = {
+  Chatarra: 1,
+  Carton: 2,
+  Mezcla: 3,
+  Cobre: 4,
+  Bronce: 5,
+  Aluminio: 6,
+  Plomo: 7,
+}
 
 export type PricesMap = Record<string, number>
 
@@ -44,11 +55,21 @@ function loadCustom(): CustomStore {
   }
 }
 
+function loadDefaultOrders(): Record<string, number> {
+  try {
+    const raw = localStorage.getItem(DEFAULTS_KEY)
+    return raw ? (JSON.parse(raw) as Record<string, number>) : DEFAULT_ORDERS
+  } catch {
+    return DEFAULT_ORDERS
+  }
+}
+
 let nextCustomId = 100
 
 export function usePrices() {
   const [prices, setPrices] = useState<PricesMap>(loadPrices)
   const [custom, setCustom] = useState<CustomStore>(loadCustom)
+  const [defaultMaterialOrders, setDefaultMaterialOrders] = useState<Record<string, number>>(loadDefaultOrders)
 
   const buildMaterials = useCallback(
     (p: PricesMap, c: CustomStore): MaterialInfo[] => {
@@ -110,5 +131,10 @@ export function usePrices() {
     persist(prices, next)
   }, [persist, prices, custom])
 
-  return { prices, allMaterials, saveAll, addMaterial, removeMaterial }
+  const updateDefaultMaterialOrders = useCallback((orders: Record<string, number>) => {
+    localStorage.setItem(DEFAULTS_KEY, JSON.stringify(orders))
+    setDefaultMaterialOrders(orders)
+  }, [])
+
+  return { prices, allMaterials, saveAll, addMaterial, removeMaterial, defaultMaterialOrders, setDefaultMaterialOrders: updateDefaultMaterialOrders }
 }
