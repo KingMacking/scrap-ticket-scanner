@@ -8,7 +8,7 @@ import type { Ticket } from '@/types/ticket'
 import type { PrintItem } from '@/lib/buildEscPos'
 import {
   History, ArrowLeft, Printer, Loader2, Trash2,
-  Wifi, WifiOff,
+  Wifi, WifiOff, ChevronDown,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -26,19 +26,34 @@ const statusLabel: Record<string, { label: string; color: 'secondary' | 'default
   cancelled: { label: 'Anulado', color: 'destructive' },
 }
 
+const PAGE_SIZE = 20
+
 export function TicketHistory({ onBack, onViewTicket }: TicketHistoryProps) {
   const { getTickets, deleteTicket, updateTicket, loading } = useTicketDb()
   const [tickets, setTickets] = useState<Ticket[]>([])
+  const [total, setTotal] = useState(0)
+  const [offset, setOffset] = useState(0)
+  const [loadingMore, setLoadingMore] = useState(false)
   const { status: qzStatus, print: qzPrint, connect: qzConnect } = useQzTray()
 
   const load = useCallback(async () => {
-    const data = await getTickets()
-    setTickets(data)
+    const result = await getTickets(PAGE_SIZE, 0)
+    setTickets(result.tickets)
+    setTotal(result.total)
+    setOffset(PAGE_SIZE)
   }, [getTickets])
 
   useEffect(() => {
     load()
   }, [load])
+
+  const loadMore = async () => {
+    setLoadingMore(true)
+    const result = await getTickets(PAGE_SIZE, offset)
+    setTickets((prev) => [...prev, ...result.tickets])
+    setOffset((prev) => prev + PAGE_SIZE)
+    setLoadingMore(false)
+  }
 
   const handleReprint = async (t: Ticket) => {
     const printItems: PrintItem[] = t.items.map((i) => ({
@@ -84,7 +99,7 @@ export function TicketHistory({ onBack, onViewTicket }: TicketHistoryProps) {
         <div className="flex items-center gap-2">
           <History className="size-5" />
           <h1 className="text-xl font-semibold">Historial de tickets</h1>
-          <Badge variant="outline">{tickets.length} ticket{tickets.length !== 1 ? 's' : ''}</Badge>
+          <Badge variant="outline">{total} ticket{total !== 1 ? 's' : ''}</Badge>
         </div>
         <Button variant="outline" size="sm" onClick={onBack}>
           <ArrowLeft className="size-3.5 mr-1.5" />
@@ -191,6 +206,14 @@ export function TicketHistory({ onBack, onViewTicket }: TicketHistoryProps) {
               </Card>
             )
           })}
+        </div>
+      )}
+      {tickets.length > 0 && tickets.length < total && (
+        <div className="flex justify-center">
+          <Button variant="outline" onClick={loadMore} disabled={loadingMore}>
+            {loadingMore ? <Loader2 className="size-4 mr-2 animate-spin" /> : <ChevronDown className="size-4 mr-2" />}
+            Cargar más ({total - tickets.length} restantes)
+          </Button>
         </div>
       )}
     </div>

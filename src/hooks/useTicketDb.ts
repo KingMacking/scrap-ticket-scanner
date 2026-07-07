@@ -92,24 +92,25 @@ export function useTicketDb() {
     return ticketRow.id
   }, [])
 
-  const getTickets = useCallback(async (): Promise<Ticket[]> => {
+  const getTickets = useCallback(async (limit = 50, offset = 0): Promise<{ tickets: Ticket[]; total: number }> => {
     setLoading(true)
     setError(null)
 
-    const { data: ticketRows, error: ticketsErr } = await supabase
+    const { data: ticketRows, error: ticketsErr, count } = await supabase
       .from('tickets')
-      .select('*')
+      .select('*', { count: 'exact', head: false })
       .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1)
 
     if (ticketsErr) {
       setError(ticketsErr.message)
       setLoading(false)
-      return []
+      return { tickets: [], total: 0 }
     }
 
     if (!ticketRows || ticketRows.length === 0) {
       setLoading(false)
-      return []
+      return { tickets: [], total: count ?? 0 }
     }
 
     const ticketIds = ticketRows.map((t: TicketRow) => t.id)
@@ -122,7 +123,7 @@ export function useTicketDb() {
     if (itemsErr) {
       setError(itemsErr.message)
       setLoading(false)
-      return []
+      return { tickets: [], total: count ?? 0 }
     }
 
     const itemsByTicketId = new Map<string, TicketItemRow[]>()
@@ -133,10 +134,13 @@ export function useTicketDb() {
     }
 
     setLoading(false)
-    return ticketRows.map((t: TicketRow) => {
-      const items = itemsByTicketId.get(t.id) ?? []
-      return mapRowToTicket(t, items)
-    })
+    return {
+      tickets: ticketRows.map((t: TicketRow) => {
+        const items = itemsByTicketId.get(t.id) ?? []
+        return mapRowToTicket(t, items)
+      }),
+      total: count ?? ticketRows.length,
+    }
   }, [])
 
   const getTicket = useCallback(async (id: string): Promise<Ticket | null> => {
