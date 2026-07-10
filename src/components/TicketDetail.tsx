@@ -183,28 +183,6 @@ export function TicketDetail({ ticketId, onBack }: TicketDetailProps) {
         </CardContent>
       </Card>
 
-      {/* Imagen capturada */}
-      {ticket.capturedImageUrl && (
-        <Card className="overflow-hidden">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">Imagen capturada</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <img src={ticket.capturedImageUrl} alt="Ticket" className="w-full max-h-64 object-contain" />
-          </CardContent>
-        </Card>
-      )}
-
-      {/* OCR raw text (solo en DEV) */}
-      {import.meta.env.DEV && ticket.ocrRawText && (
-        <details className="text-xs text-muted-foreground">
-          <summary className="cursor-pointer hover:text-foreground">Texto crudo OCR</summary>
-          <pre className="mt-2 p-3 rounded-md bg-muted font-mono whitespace-pre-wrap max-h-48 overflow-auto">
-            {ticket.ocrRawText}
-          </pre>
-        </details>
-      )}
-
       {/* Acciones */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5 text-xs">

@@ -1,13 +1,12 @@
 import { useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
-import type { Ticket, TicketRow, TicketItemRow, TicketStatus } from '@/types/ticket'
+import type { Ticket, TicketRow, TicketItemJson, TicketStatus } from '@/types/ticket'
 
 export interface MaterialSummaryItem {
   materialName: string
   totalWeight: number
   totalValue: number
   avgPrice: number
-  totalProfit: number
 }
 
 export interface MaterialSummaryResult {
@@ -19,14 +18,11 @@ interface CreateItemInput {
   materialName: string
   weight: number
   price: number
-  salePrice: number
 }
 
 interface CreateTicketInput {
   items: CreateItemInput[]
   total: number
-  capturedImageUrl: string | null
-  ocrRawText: string | null
   client?: string
   notes?: string
 }
@@ -53,40 +49,37 @@ export function useTicketDb() {
       return null
     }
 
+    const itemsJson: TicketItemJson[] = input.items
+      .filter((item) => item.weight > 0 && item.price > 0)
+      .map((item) => ({
+        material_name: item.materialName,
+        weight: item.weight,
+        price: item.price,
+        subtotal: item.weight * item.price,
+      }))
+
+    if (itemsJson.length === 0) {
+      setError('No valid items')
+      setLoading(false)
+      return null
+    }
+
+    const total = itemsJson.reduce((sum, i) => sum + i.subtotal, 0)
+
     const { data: ticketRow, error: ticketErr } = await supabase
       .from('tickets')
       .insert({
         user_id: user.id,
         client: input.client ?? '',
-        total: input.total,
+        total,
         notes: input.notes ?? '',
-        captured_image_url: input.capturedImageUrl,
-        ocr_raw_text: input.ocrRawText,
+        items: itemsJson,
       })
       .select()
       .single()
 
     if (ticketErr || !ticketRow) {
       setError(ticketErr?.message ?? 'Failed to create ticket')
-      setLoading(false)
-      return null
-    }
-
-    const itemRows = input.items.map((item) => ({
-      ticket_id: ticketRow.id,
-      material_name: item.materialName,
-      weight: item.weight,
-      price: item.price,
-      sale_price: item.salePrice,
-      subtotal: item.weight * item.price,
-    }))
-
-    const { error: itemsErr } = await supabase
-      .from('ticket_items')
-      .insert(itemRows)
-
-    if (itemsErr) {
-      setError(itemsErr.message)
       setLoading(false)
       return null
     }
@@ -111,38 +104,10 @@ export function useTicketDb() {
       return { tickets: [], total: 0 }
     }
 
-    if (!ticketRows || ticketRows.length === 0) {
-      setLoading(false)
-      return { tickets: [], total: count ?? 0 }
-    }
-
-    const ticketIds = ticketRows.map((t: TicketRow) => t.id)
-
-    const { data: itemRows, error: itemsErr } = await supabase
-      .from('ticket_items')
-      .select('*')
-      .in('ticket_id', ticketIds)
-
-    if (itemsErr) {
-      setError(itemsErr.message)
-      setLoading(false)
-      return { tickets: [], total: count ?? 0 }
-    }
-
-    const itemsByTicketId = new Map<string, TicketItemRow[]>()
-    for (const item of itemRows ?? []) {
-      const existing = itemsByTicketId.get(item.ticket_id) ?? []
-      existing.push(item)
-      itemsByTicketId.set(item.ticket_id, existing)
-    }
-
     setLoading(false)
     return {
-      tickets: ticketRows.map((t: TicketRow) => {
-        const items = itemsByTicketId.get(t.id) ?? []
-        return mapRowToTicket(t, items)
-      }),
-      total: count ?? ticketRows.length,
+      tickets: (ticketRows ?? []).map(mapRowToTicket),
+      total: count ?? ticketRows?.length ?? 0,
     }
   }, [])
 
@@ -162,13 +127,8 @@ export function useTicketDb() {
       return null
     }
 
-    const { data: itemRows } = await supabase
-      .from('ticket_items')
-      .select('*')
-      .eq('ticket_id', id)
-
     setLoading(false)
-    return mapRowToTicket(ticketRow, itemRows ?? [])
+    return mapRowToTicket(ticketRow)
   }, [])
 
   const updateTicket = useCallback(async (id: string, input: UpdateTicketInput): Promise<Ticket | null> => {
@@ -188,13 +148,8 @@ export function useTicketDb() {
       return null
     }
 
-    const { data: itemRows } = await supabase
-      .from('ticket_items')
-      .select('*')
-      .eq('ticket_id', id)
-
     setLoading(false)
-    return mapRowToTicket(ticketRow, itemRows ?? [])
+    return mapRowToTicket(ticketRow)
   }, [])
 
   const deleteTicket = useCallback(async (id: string): Promise<boolean> => {
@@ -231,7 +186,7 @@ export function useTicketDb() {
 
     const { data: tickets, error: err } = await supabase
       .from('tickets')
-      .select('id, ticket_items!inner(material_name, weight, price, sale_price, subtotal)')
+      .select('items')
       .gte('created_at', from)
       .lt('created_at', to)
       .eq('user_id', user.id)
@@ -243,15 +198,14 @@ export function useTicketDb() {
       return { items: [], totalTickets: 0 }
     }
 
-    const matMap = new Map<string, { totalWeight: number; totalValue: number; totalProfit: number }>()
+    const matMap = new Map<string, { totalWeight: number; totalValue: number }>()
 
     for (const t of tickets ?? []) {
-      const items = (t as any).ticket_items ?? []
+      const items = (t as any).items as TicketItemJson[] ?? []
       for (const item of items) {
-        const prev = matMap.get(item.material_name) ?? { totalWeight: 0, totalValue: 0, totalProfit: 0 }
+        const prev = matMap.get(item.material_name) ?? { totalWeight: 0, totalValue: 0 }
         prev.totalWeight += item.weight
         prev.totalValue += item.subtotal
-        prev.totalProfit += (item.sale_price - item.price) * item.weight
         matMap.set(item.material_name, prev)
       }
     }
@@ -263,7 +217,6 @@ export function useTicketDb() {
         totalWeight: Math.round(data.totalWeight * 100) / 100,
         totalValue: Math.round(data.totalValue * 100) / 100,
         avgPrice: data.totalWeight > 0 ? Math.round((data.totalValue / data.totalWeight) * 100) / 100 : 0,
-        totalProfit: Math.round(data.totalProfit * 100) / 100,
       })
     }
 
@@ -276,7 +229,17 @@ export function useTicketDb() {
   return { createTicket, getTickets, getTicket, updateTicket, deleteTicket, getMaterialSummary, loading, error }
 }
 
-function mapRowToTicket(t: TicketRow, items: TicketItemRow[]): Ticket {
+let itemIdCounter = 0
+
+function mapRowToTicket(t: TicketRow): Ticket {
+  const items = (t.items ?? []).map((i) => ({
+    id: `item-${++itemIdCounter}`,
+    materialName: i.material_name,
+    detectedWeight: null,
+    correctedWeight: i.weight,
+    price: i.price,
+  }))
+
   return {
     id: t.id,
     createdAt: t.created_at,
@@ -285,15 +248,6 @@ function mapRowToTicket(t: TicketRow, items: TicketItemRow[]): Ticket {
     status: t.status,
     total: t.total,
     notes: t.notes,
-    capturedImageUrl: t.captured_image_url,
-    ocrRawText: t.ocr_raw_text,
-    items: items.map((i) => ({
-      id: i.id,
-      materialName: i.material_name,
-      detectedWeight: null,
-      correctedWeight: i.weight,
-      price: i.price,
-      salePrice: i.sale_price,
-    })),
+    items,
   }
 }

@@ -19,13 +19,6 @@ const fmt = (n: number) =>
 const fmtWeight = (n: number) =>
   n.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 
-function toISODate(d: Date): string {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
-
 function todayStart(): Date {
   const d = new Date()
   d.setHours(0, 0, 0, 0)
@@ -61,8 +54,8 @@ function monthEnd(): Date {
   d.setHours(23, 59, 59, 999)
   return d
 }
-type SortKey = 'materialName' | 'totalWeight' | 'totalValue' | 'avgPrice' | 'totalProfit'
 
+type SortKey = 'materialName' | 'totalWeight' | 'totalValue' | 'avgPrice'
 type SortDir = 'asc' | 'desc'
 
 function sortItems(items: MaterialSummaryItem[], key: SortKey, dir: SortDir): MaterialSummaryItem[] {
@@ -104,8 +97,7 @@ const columns: { key: SortKey; label: string; numeric: boolean }[] = [
   { key: 'materialName', label: 'Material', numeric: false },
   { key: 'totalWeight', label: 'Peso (kg)', numeric: true },
   { key: 'totalValue', label: 'Total ($)', numeric: true },
-  { key: 'avgPrice', label: '$/kg (compra)', numeric: true },
-  { key: 'totalProfit', label: 'Ganancia ($)', numeric: true },
+  { key: 'avgPrice', label: '$/kg', numeric: true },
 ]
 
 export function Dashboard({ onBack }: DashboardProps) {
@@ -113,12 +105,12 @@ export function Dashboard({ onBack }: DashboardProps) {
   const [toDate, setToDate] = useState(todayEnd)
   const [summary, setSummary] = useState<MaterialSummaryItem[]>([])
   const [totalTickets, setTotalTickets] = useState(0)
-  const { getMaterialSummary, loading } = useTicketDb()
+  const { getMaterialSummary, loading, error: dbError } = useTicketDb()
   const [sortKey, setSortKey] = useState<SortKey>('totalValue')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
 
-  const from = `${toISODate(fromDate)}T00:00:00Z`
-  const to = `${toISODate(toDate)}T23:59:59Z`
+  const from = fromDate.toISOString()
+  const to = toDate.toISOString()
 
   const load = useCallback(async () => {
     const result = await getMaterialSummary(from, to)
@@ -183,7 +175,7 @@ export function Dashboard({ onBack }: DashboardProps) {
                 <label className="text-xs text-muted-foreground">Desde</label>
                 <input
                   type="date"
-                  value={toISODate(fromDate)}
+                  value={fromDate.toISOString().slice(0, 10)}
                   onChange={(e) => {
                     const d = new Date(e.target.value + 'T00:00:00')
                     if (!isNaN(d.getTime())) setFromDate(d)
@@ -195,7 +187,7 @@ export function Dashboard({ onBack }: DashboardProps) {
                 <label className="text-xs text-muted-foreground">Hasta</label>
                 <input
                   type="date"
-                  value={toISODate(toDate)}
+                  value={toDate.toISOString().slice(0, 10)}
                   onChange={(e) => {
                     const d = new Date(e.target.value + 'T23:59:59')
                     if (!isNaN(d.getTime())) setToDate(d)
@@ -218,11 +210,12 @@ export function Dashboard({ onBack }: DashboardProps) {
         <div className="flex flex-col items-center justify-center py-10 gap-2 text-muted-foreground">
           <BarChart3 className="size-8 opacity-30" />
           <p className="text-sm">No hay tickets para este período</p>
+          {dbError && <p className="text-xs text-destructive">{dbError}</p>}
         </div>
       ) : (
         <>
           {/* Cards resumen */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <Card>
               <CardContent className="p-4 text-center">
                 <p className="text-sm text-muted-foreground mb-1">Valor total</p>
@@ -233,14 +226,6 @@ export function Dashboard({ onBack }: DashboardProps) {
               <CardContent className="p-4 text-center">
                 <p className="text-sm text-muted-foreground mb-1">Tickets</p>
                 <p className="text-3xl font-bold tabular-nums">{totalTickets}</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 text-center">
-                <p className="text-sm text-muted-foreground mb-1">Ganancia total</p>
-                <p className="text-3xl font-bold tabular-nums text-green-600">$ {fmt(
-                  summary.reduce((a, i) => a + i.totalProfit, 0)
-                )}</p>
               </CardContent>
             </Card>
           </div>
@@ -275,7 +260,6 @@ export function Dashboard({ onBack }: DashboardProps) {
                       <TableCell className="text-right tabular-nums">{fmtWeight(item.totalWeight)}</TableCell>
                       <TableCell className="text-right tabular-nums font-medium">$ {fmt(item.totalValue)}</TableCell>
                       <TableCell className="text-right tabular-nums">$ {fmt(item.avgPrice)}</TableCell>
-                      <TableCell className="text-right tabular-nums text-green-600 font-medium">$ {fmt(item.totalProfit)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -290,9 +274,6 @@ export function Dashboard({ onBack }: DashboardProps) {
                       sorted.reduce((a, i) => a + i.totalWeight, 0) > 0
                         ? totalValue / sorted.reduce((a, i) => a + i.totalWeight, 0)
                         : 0
-                    )}</TableHead>
-                    <TableHead className="text-right font-bold text-base tabular-nums text-green-600">$ {fmt(
-                      sorted.reduce((a, i) => a + i.totalProfit, 0)
                     )}</TableHead>
                   </TableRow>
                 </TableHeader>
