@@ -61,8 +61,8 @@ function monthEnd(): Date {
   d.setHours(23, 59, 59, 999)
   return d
 }
+type SortKey = 'materialName' | 'totalWeight' | 'totalValue' | 'avgPrice' | 'totalProfit'
 
-type SortKey = 'materialName' | 'totalWeight' | 'totalValue' | 'avgPrice'
 type SortDir = 'asc' | 'desc'
 
 function sortItems(items: MaterialSummaryItem[], key: SortKey, dir: SortDir): MaterialSummaryItem[] {
@@ -104,7 +104,8 @@ const columns: { key: SortKey; label: string; numeric: boolean }[] = [
   { key: 'materialName', label: 'Material', numeric: false },
   { key: 'totalWeight', label: 'Peso (kg)', numeric: true },
   { key: 'totalValue', label: 'Total ($)', numeric: true },
-  { key: 'avgPrice', label: '$/kg', numeric: true },
+  { key: 'avgPrice', label: '$/kg (compra)', numeric: true },
+  { key: 'totalProfit', label: 'Ganancia ($)', numeric: true },
 ]
 
 export function Dashboard({ onBack }: DashboardProps) {
@@ -221,7 +222,7 @@ export function Dashboard({ onBack }: DashboardProps) {
       ) : (
         <>
           {/* Cards resumen */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <Card>
               <CardContent className="p-4 text-center">
                 <p className="text-sm text-muted-foreground mb-1">Valor total</p>
@@ -232,6 +233,14 @@ export function Dashboard({ onBack }: DashboardProps) {
               <CardContent className="p-4 text-center">
                 <p className="text-sm text-muted-foreground mb-1">Tickets</p>
                 <p className="text-3xl font-bold tabular-nums">{totalTickets}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4 text-center">
+                <p className="text-sm text-muted-foreground mb-1">Ganancia total</p>
+                <p className="text-3xl font-bold tabular-nums text-green-600">$ {fmt(
+                  summary.reduce((a, i) => a + i.totalProfit, 0)
+                )}</p>
               </CardContent>
             </Card>
           </div>
@@ -266,6 +275,7 @@ export function Dashboard({ onBack }: DashboardProps) {
                       <TableCell className="text-right tabular-nums">{fmtWeight(item.totalWeight)}</TableCell>
                       <TableCell className="text-right tabular-nums font-medium">$ {fmt(item.totalValue)}</TableCell>
                       <TableCell className="text-right tabular-nums">$ {fmt(item.avgPrice)}</TableCell>
+                      <TableCell className="text-right tabular-nums text-green-600 font-medium">$ {fmt(item.totalProfit)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -280,6 +290,9 @@ export function Dashboard({ onBack }: DashboardProps) {
                       sorted.reduce((a, i) => a + i.totalWeight, 0) > 0
                         ? totalValue / sorted.reduce((a, i) => a + i.totalWeight, 0)
                         : 0
+                    )}</TableHead>
+                    <TableHead className="text-right font-bold text-base tabular-nums text-green-600">$ {fmt(
+                      sorted.reduce((a, i) => a + i.totalProfit, 0)
                     )}</TableHead>
                   </TableRow>
                 </TableHeader>

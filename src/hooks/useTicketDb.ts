@@ -7,6 +7,7 @@ export interface MaterialSummaryItem {
   totalWeight: number
   totalValue: number
   avgPrice: number
+  totalProfit: number
 }
 
 export interface MaterialSummaryResult {
@@ -18,6 +19,7 @@ interface CreateItemInput {
   materialName: string
   weight: number
   price: number
+  salePrice: number
 }
 
 interface CreateTicketInput {
@@ -75,6 +77,7 @@ export function useTicketDb() {
       material_name: item.materialName,
       weight: item.weight,
       price: item.price,
+      sale_price: item.salePrice,
       subtotal: item.weight * item.price,
     }))
 
@@ -228,7 +231,7 @@ export function useTicketDb() {
 
     const { data: tickets, error: err } = await supabase
       .from('tickets')
-      .select('id, ticket_items!inner(material_name, weight, subtotal)')
+      .select('id, ticket_items!inner(material_name, weight, price, sale_price, subtotal)')
       .gte('created_at', from)
       .lt('created_at', to)
       .eq('user_id', user.id)
@@ -240,14 +243,15 @@ export function useTicketDb() {
       return { items: [], totalTickets: 0 }
     }
 
-    const matMap = new Map<string, { totalWeight: number; totalValue: number }>()
+    const matMap = new Map<string, { totalWeight: number; totalValue: number; totalProfit: number }>()
 
     for (const t of tickets ?? []) {
       const items = (t as any).ticket_items ?? []
       for (const item of items) {
-        const prev = matMap.get(item.material_name) ?? { totalWeight: 0, totalValue: 0 }
+        const prev = matMap.get(item.material_name) ?? { totalWeight: 0, totalValue: 0, totalProfit: 0 }
         prev.totalWeight += item.weight
         prev.totalValue += item.subtotal
+        prev.totalProfit += (item.sale_price - item.price) * item.weight
         matMap.set(item.material_name, prev)
       }
     }
@@ -259,6 +263,7 @@ export function useTicketDb() {
         totalWeight: Math.round(data.totalWeight * 100) / 100,
         totalValue: Math.round(data.totalValue * 100) / 100,
         avgPrice: data.totalWeight > 0 ? Math.round((data.totalValue / data.totalWeight) * 100) / 100 : 0,
+        totalProfit: Math.round(data.totalProfit * 100) / 100,
       })
     }
 
@@ -288,6 +293,7 @@ function mapRowToTicket(t: TicketRow, items: TicketItemRow[]): Ticket {
       detectedWeight: null,
       correctedWeight: i.weight,
       price: i.price,
+      salePrice: i.sale_price,
     })),
   }
 }

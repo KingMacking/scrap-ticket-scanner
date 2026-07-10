@@ -24,16 +24,25 @@ function nextOrder(orders: Record<string, number>): number {
 }
 
 export function PriceManager({ prices, allMaterials, defaultMaterialOrders, onSave, onAddMaterial, onRemoveMaterial, onSetDefaultMaterialOrders, onBack }: PriceManagerProps) {
-  const [draft, setDraft] = useState<Record<string, string>>(() =>
+  const [purchaseDraft, setPurchaseDraft] = useState<Record<string, string>>(() =>
     Object.fromEntries(
-      allMaterials.map((mat) => [mat.name, prices[mat.name]?.toString() ?? ''])
+      allMaterials.map((mat) => [mat.name, prices[mat.name]?.purchase?.toString() ?? ''])
+    )
+  )
+  const [saleDraft, setSaleDraft] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      allMaterials.map((mat) => [mat.name, prices[mat.name]?.sale?.toString() ?? ''])
     )
   )
   const [newName, setNewName] = useState('')
   const [newPrice, setNewPrice] = useState('')
 
-  const handleChange = (name: string, value: string) => {
-    setDraft((prev) => ({ ...prev, [name]: value }))
+  const handlePurchaseChange = (name: string, value: string) => {
+    setPurchaseDraft((prev) => ({ ...prev, [name]: value }))
+  }
+
+  const handleSaleChange = (name: string, value: string) => {
+    setSaleDraft((prev) => ({ ...prev, [name]: value }))
   }
 
   const toggleDefault = (name: string) => {
@@ -55,16 +64,20 @@ export function PriceManager({ prices, allMaterials, defaultMaterialOrders, onSa
   const handleSave = () => {
     const next: PricesMap = {}
     for (const mat of allMaterials) {
-      const val = parseFloat(draft[mat.name])
-      if (!isNaN(val) && val > 0) {
-        next[mat.name] = val
+      const purchase = parseFloat(purchaseDraft[mat.name])
+      const sale = parseFloat(saleDraft[mat.name])
+      if (!isNaN(purchase) && purchase > 0) {
+        next[mat.name] = {
+          purchase,
+          sale: !isNaN(sale) && sale > 0 ? sale : purchase,
+        }
       }
     }
     if (newName.trim() && newPrice.trim()) {
       const val = parseFloat(newPrice)
       if (!isNaN(val) && val > 0) {
         onAddMaterial(newName.trim())
-        next[newName.trim()] = val
+        next[newName.trim()] = { purchase: val, sale: val }
       }
     }
     onSave(next)
@@ -80,7 +93,8 @@ export function PriceManager({ prices, allMaterials, defaultMaterialOrders, onSa
       return toast.error('Ese material ya existe')
     }
     onAddMaterial(name)
-    setDraft((prev) => ({ ...prev, [name]: price.toString() }))
+    setPurchaseDraft((prev) => ({ ...prev, [name]: price.toString() }))
+    setSaleDraft((prev) => ({ ...prev, [name]: price.toString() }))
     setNewName('')
     setNewPrice('')
     toast.success(`"${name}" agregado`)
@@ -111,7 +125,8 @@ export function PriceManager({ prices, allMaterials, defaultMaterialOrders, onSa
                 <TableHead>Material</TableHead>
                 <TableHead className="text-center w-14">Predet.</TableHead>
                 <TableHead className="text-center w-16">Orden</TableHead>
-                <TableHead>Precio ($/kg)</TableHead>
+                <TableHead>Compra ($/kg)</TableHead>
+                <TableHead>Venta ($/kg)</TableHead>
                 <TableHead className="w-10" />
               </TableRow>
             </TableHeader>
@@ -149,8 +164,19 @@ export function PriceManager({ prices, allMaterials, defaultMaterialOrders, onSa
                         min="0"
                         placeholder="—"
                         className="w-28 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                        value={draft[mat.name]}
-                        onChange={(e) => handleChange(mat.name, e.target.value)}
+                        value={purchaseDraft[mat.name]}
+                        onChange={(e) => handlePurchaseChange(mat.name, e.target.value)}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="—"
+                        className="w-28 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                        value={saleDraft[mat.name]}
+                        onChange={(e) => handleSaleChange(mat.name, e.target.value)}
                       />
                     </TableCell>
                     <TableCell>

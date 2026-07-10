@@ -64,7 +64,7 @@ export function TicketEditor({ ocrResult, capturedImageUrl, prices, allMaterials
       return {
         materialId: mat.id,
         weight: detected?.detectedWeight?.toString() ?? '',
-        price: prices[mat.name]?.toString() ?? '',
+        price: prices[mat.name]?.purchase?.toString() ?? '',
       }
     }),
   })
@@ -94,7 +94,7 @@ export function TicketEditor({ ocrResult, capturedImageUrl, prices, allMaterials
     append({
       materialId: mat.id,
       weight: '',
-      price: prices[mat.name]?.toString() ?? '',
+      price: prices[mat.name]?.purchase?.toString() ?? '',
     })
   }
 
@@ -157,12 +157,14 @@ export function TicketEditor({ ocrResult, capturedImageUrl, prices, allMaterials
         const p = parseFloat(row.price)
         const mat = allMaterials.find((m) => m.id === row.materialId)
         if (!mat || isNaN(w) || isNaN(p) || w <= 0 || p <= 0) return null
+        const salePrice = prices[mat.name]?.sale
+        const clampedPrice = salePrice !== undefined && p > salePrice ? salePrice : p
         return {
           id: '',
           materialName: mat.name,
           detectedWeight: null,
           correctedWeight: w,
-          price: p,
+          price: clampedPrice,
         }
       })
       .filter((i): i is TicketItem => i !== null)
@@ -243,6 +245,7 @@ export function TicketEditor({ ocrResult, capturedImageUrl, prices, allMaterials
                             type="number"
                             step="0.01"
                             placeholder="—"
+                            max={mat ? prices[mat.name]?.sale ?? '' : ''}
                             className="w-28 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                           />
                         </TableCell>

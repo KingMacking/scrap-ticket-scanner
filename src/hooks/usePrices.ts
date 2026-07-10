@@ -1,7 +1,8 @@
 import { useState, useCallback } from 'react'
 import { MATERIALS } from '@/data/materials'
 
-const PRICES_KEY = 'scrap-prices-v2'
+const PRICES_KEY = 'scrap-prices-v3'
+const PRICES_KEY_OLD = 'scrap-prices-v2'
 const CUSTOM_KEY = 'scrap-custom-materials-v2'
 const DEFAULTS_KEY = 'scrap-default-materials-v2'
 
@@ -15,7 +16,12 @@ const DEFAULT_ORDERS: Record<string, number> = {
   Plomo: 7,
 }
 
-export type PricesMap = Record<string, number>
+export interface PriceEntry {
+  purchase: number
+  sale: number
+}
+
+export type PricesMap = Record<string, PriceEntry>
 
 export interface MaterialInfo {
   id: string
@@ -33,14 +39,28 @@ interface CustomStore {
 
 const DEFAULT_CUSTOM: CustomStore = { customNames: [], hiddenNames: [] }
 const DEFAULT_PRICES: PricesMap = Object.fromEntries(
-  MATERIALS.map((m) => [m.name, m.defaultPrice])
+  MATERIALS.map((m) => [m.name, { purchase: m.defaultPrice, sale: m.defaultPrice }])
 )
 
 function loadPrices(): PricesMap {
   try {
     const raw = localStorage.getItem(PRICES_KEY)
-    const saved = raw ? (JSON.parse(raw) as PricesMap) : {}
-    return { ...DEFAULT_PRICES, ...saved }
+    if (raw) {
+      return { ...DEFAULT_PRICES, ...JSON.parse(raw) }
+    }
+    // Migrate from old flat format (Record<string, number>)
+    const oldRaw = localStorage.getItem(PRICES_KEY_OLD)
+    if (oldRaw) {
+      const old = JSON.parse(oldRaw) as Record<string, number>
+      const migrated: PricesMap = {}
+      for (const [name, price] of Object.entries(old)) {
+        migrated[name] = { purchase: price, sale: price }
+      }
+      localStorage.setItem(PRICES_KEY, JSON.stringify(migrated))
+      localStorage.removeItem(PRICES_KEY_OLD)
+      return { ...DEFAULT_PRICES, ...migrated }
+    }
+    return DEFAULT_PRICES
   } catch {
     return DEFAULT_PRICES
   }
@@ -88,7 +108,7 @@ export function usePrices() {
         .map((n, i) => ({
           id: `custom-${nextCustomId++}`,
           name: n,
-          defaultPrice: p[n] ?? 0,
+          defaultPrice: p[n]?.purchase ?? 0,
           aliases: [n.toLowerCase()] as readonly string[],
           isCustom: true as const,
           orderIndex: MATERIALS.length + i + 1,

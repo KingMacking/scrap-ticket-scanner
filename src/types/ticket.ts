@@ -4,6 +4,7 @@ export interface TicketItem {
   detectedWeight: number | null
   correctedWeight: number | null
   price: number | null
+  salePrice?: number | null
 }
 
 export type TicketStatus = 'pending' | 'printed' | 'cancelled'
@@ -40,6 +41,7 @@ export interface TicketItemRow {
   material_name: string
   weight: number
   price: number
+  sale_price: number
   subtotal: number
   created_at: string
 }

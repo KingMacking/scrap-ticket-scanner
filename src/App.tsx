@@ -58,6 +58,7 @@ function AppContent() {
         materialName: i.materialName,
         weight: i.correctedWeight ?? 0,
         price: i.price ?? 0,
+        salePrice: prices[i.materialName]?.sale ?? 0,
       })),
       total,
       capturedImageUrl,
