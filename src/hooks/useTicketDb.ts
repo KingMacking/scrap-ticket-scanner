@@ -1,11 +1,13 @@
 import { useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { Ticket, TicketRow, TicketItemJson, TicketStatus } from '@/types/ticket'
+import type { PricesMap } from './usePrices'
 
 export interface MaterialSummaryItem {
   materialName: string
   totalWeight: number
   totalValue: number
+  totalProfit: number
   avgPrice: number
 }
 
@@ -173,7 +175,8 @@ export function useTicketDb() {
 
   const getMaterialSummary = useCallback(async (
     from: string,
-    to: string
+    to: string,
+    prices?: PricesMap
   ): Promise<MaterialSummaryResult> => {
     setLoading(true)
     setError(null)
@@ -198,14 +201,16 @@ export function useTicketDb() {
       return { items: [], totalTickets: 0 }
     }
 
-    const matMap = new Map<string, { totalWeight: number; totalValue: number }>()
+    const matMap = new Map<string, { totalWeight: number; totalValue: number; totalProfit: number }>()
 
     for (const t of tickets ?? []) {
       const items = (t as any).items as TicketItemJson[] ?? []
       for (const item of items) {
-        const prev = matMap.get(item.material_name) ?? { totalWeight: 0, totalValue: 0 }
+        const prev = matMap.get(item.material_name) ?? { totalWeight: 0, totalValue: 0, totalProfit: 0 }
         prev.totalWeight += item.weight
         prev.totalValue += item.subtotal
+        const salePrice = prices?.[item.material_name]?.sale ?? 0
+        prev.totalProfit += Math.max(0, salePrice - item.price) * item.weight
         matMap.set(item.material_name, prev)
       }
     }
@@ -216,6 +221,7 @@ export function useTicketDb() {
         materialName,
         totalWeight: Math.round(data.totalWeight * 100) / 100,
         totalValue: Math.round(data.totalValue * 100) / 100,
+        totalProfit: Math.round(data.totalProfit * 100) / 100,
         avgPrice: data.totalWeight > 0 ? Math.round((data.totalValue / data.totalWeight) * 100) / 100 : 0,
       })
     }

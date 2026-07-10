@@ -5,6 +5,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
 import { useTicketDb, type MaterialSummaryItem } from '@/hooks/useTicketDb'
+import { usePrices } from '@/hooks/usePrices'
 import {
   ArrowLeft, BarChart3, Loader2, ChevronUp, ChevronDown,
 } from 'lucide-react'
@@ -55,7 +56,7 @@ function monthEnd(): Date {
   return d
 }
 
-type SortKey = 'materialName' | 'totalWeight' | 'totalValue' | 'avgPrice'
+type SortKey = 'materialName' | 'totalWeight' | 'totalValue' | 'totalProfit' | 'avgPrice'
 type SortDir = 'asc' | 'desc'
 
 function sortItems(items: MaterialSummaryItem[], key: SortKey, dir: SortDir): MaterialSummaryItem[] {
@@ -98,6 +99,7 @@ const columns: { key: SortKey; label: string; numeric: boolean }[] = [
   { key: 'totalWeight', label: 'Peso (kg)', numeric: true },
   { key: 'totalValue', label: 'Total ($)', numeric: true },
   { key: 'avgPrice', label: '$/kg', numeric: true },
+  { key: 'totalProfit', label: 'Ganancia ($)', numeric: true },
 ]
 
 export function Dashboard({ onBack }: DashboardProps) {
@@ -106,6 +108,7 @@ export function Dashboard({ onBack }: DashboardProps) {
   const [summary, setSummary] = useState<MaterialSummaryItem[]>([])
   const [totalTickets, setTotalTickets] = useState(0)
   const { getMaterialSummary, loading, error: dbError } = useTicketDb()
+  const { prices } = usePrices()
   const [sortKey, setSortKey] = useState<SortKey>('totalValue')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
 
@@ -113,10 +116,10 @@ export function Dashboard({ onBack }: DashboardProps) {
   const to = toDate.toISOString()
 
   const load = useCallback(async () => {
-    const result = await getMaterialSummary(from, to)
+    const result = await getMaterialSummary(from, to, prices)
     setSummary(result.items)
     setTotalTickets(result.totalTickets)
-  }, [from, to, getMaterialSummary])
+  }, [from, to, prices, getMaterialSummary])
 
   useEffect(() => {
     load()
@@ -138,6 +141,7 @@ export function Dashboard({ onBack }: DashboardProps) {
   const setMonth = () => { setFromDate(monthStart()); setToDate(monthEnd()) }
 
   const totalValue = summary.reduce((acc, s) => acc + s.totalValue, 0)
+  const totalProfit = summary.reduce((acc, s) => acc + s.totalProfit, 0)
 
   const SortIcon = ({ columnKey }: { columnKey: SortKey }) => {
     const active = columnKey === sortKey
@@ -215,11 +219,19 @@ export function Dashboard({ onBack }: DashboardProps) {
       ) : (
         <>
           {/* Cards resumen */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <Card>
               <CardContent className="p-4 text-center">
                 <p className="text-sm text-muted-foreground mb-1">Valor total</p>
                 <p className="text-3xl font-bold tabular-nums">$ {fmt(totalValue)}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4 text-center">
+                <p className="text-sm text-muted-foreground mb-1">Ganancia</p>
+                <p className={`text-3xl font-bold tabular-nums ${totalProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  $ {fmt(totalProfit)}
+                </p>
               </CardContent>
             </Card>
             <Card>
@@ -254,12 +266,15 @@ export function Dashboard({ onBack }: DashboardProps) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {sorted.map((item) => (
+                    {sorted.map((item) => (
                     <TableRow key={item.materialName}>
                       <TableCell className="font-medium">{item.materialName}</TableCell>
                       <TableCell className="text-right tabular-nums">{fmtWeight(item.totalWeight)}</TableCell>
                       <TableCell className="text-right tabular-nums font-medium">$ {fmt(item.totalValue)}</TableCell>
                       <TableCell className="text-right tabular-nums">$ {fmt(item.avgPrice)}</TableCell>
+                      <TableCell className={`text-right tabular-nums font-medium ${item.totalProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        $ {fmt(item.totalProfit)}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -275,6 +290,9 @@ export function Dashboard({ onBack }: DashboardProps) {
                         ? totalValue / sorted.reduce((a, i) => a + i.totalWeight, 0)
                         : 0
                     )}</TableHead>
+                    <TableHead className={`text-right font-bold text-base tabular-nums ${totalProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      $ {fmt(totalProfit)}
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
               </Table>
