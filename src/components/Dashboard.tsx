@@ -7,12 +7,12 @@ import {
 import { useTicketDb, type MaterialSummaryItem } from '@/hooks/useTicketDb'
 import { usePrices } from '@/hooks/usePrices'
 import {
-  ArrowLeft, BarChart3, Loader2, ChevronUp, ChevronDown,
+  BarChart3, Loader2, ChevronUp, ChevronDown,
+  DollarSign, TrendingUp, FileText, ShoppingCart, Scale,
+  Weight, BadgePercent,
 } from 'lucide-react'
-
-interface DashboardProps {
-  onBack: () => void
-}
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import type { Ticket } from '@/types/ticket'
 
 const fmt = (n: number) =>
   Math.round(n).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
@@ -94,6 +94,69 @@ function formatPeriod(from: Date, to: Date): string {
   })}`
 }
 
+function timeAgo(dateStr: string): string {
+  const now = Date.now()
+  const then = new Date(dateStr).getTime()
+  const diff = now - then
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'ahora'
+  if (mins < 60) return `hace ${mins}m`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `hace ${hrs}h`
+  const days = Math.floor(hrs / 24)
+  return `hace ${days}d`
+}
+
+function StatCard({
+  title, value, icon: Icon, color,
+}: {
+  title: string
+  value: string
+  icon: typeof DollarSign
+  color: string
+}) {
+  return (
+    <Card className="transition-all duration-200 hover:shadow-md">
+      <CardHeader className="flex flex-row items-center justify-between pb-2">
+        <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+          {title}
+        </CardTitle>
+        <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${color}`}>
+          <Icon className="h-4 w-4" />
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="text-xl font-semibold tabular-nums">{value}</div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function IndicatorCard({
+  label, value, icon: Icon, color, sub,
+}: {
+  label: string
+  value: string
+  icon: typeof DollarSign
+  color: string
+  sub?: string
+}) {
+  return (
+    <Card className="transition-all duration-200 hover:shadow-md">
+      <CardContent className="flex items-start gap-3 p-4">
+        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${color}`}>
+          <Icon className="h-4 w-4" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-xs text-muted-foreground uppercase tracking-wider truncate">{label}</p>
+          <p className="text-base font-semibold mt-0.5">{value}</p>
+          {sub && <p className="text-[11px] text-muted-foreground truncate">{sub}</p>}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 const columns: { key: SortKey; label: string; numeric: boolean }[] = [
   { key: 'materialName', label: 'Material', numeric: false },
   { key: 'totalWeight', label: 'Peso (kg)', numeric: true },
@@ -102,12 +165,13 @@ const columns: { key: SortKey; label: string; numeric: boolean }[] = [
   { key: 'totalProfit', label: 'Ganancia ($)', numeric: true },
 ]
 
-export function Dashboard({ onBack }: DashboardProps) {
+export function Dashboard() {
   const [fromDate, setFromDate] = useState(todayStart)
   const [toDate, setToDate] = useState(todayEnd)
   const [summary, setSummary] = useState<MaterialSummaryItem[]>([])
   const [totalTickets, setTotalTickets] = useState(0)
-  const { getMaterialSummary, loading, error: dbError } = useTicketDb()
+  const [recentTickets, setRecentTickets] = useState<Ticket[]>([])
+  const { getMaterialSummary, getRecentTickets, loading, error: dbError } = useTicketDb()
   const { prices } = usePrices()
   const [sortKey, setSortKey] = useState<SortKey>('totalValue')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
@@ -119,7 +183,9 @@ export function Dashboard({ onBack }: DashboardProps) {
     const result = await getMaterialSummary(from, to, prices)
     setSummary(result.items)
     setTotalTickets(result.totalTickets)
-  }, [from, to, prices, getMaterialSummary])
+    const recent = await getRecentTickets(10)
+    setRecentTickets(recent)
+  }, [from, to, prices, getMaterialSummary, getRecentTickets])
 
   useEffect(() => {
     load()
@@ -142,6 +208,24 @@ export function Dashboard({ onBack }: DashboardProps) {
 
   const totalValue = summary.reduce((acc, s) => acc + s.totalValue, 0)
   const totalProfit = summary.reduce((acc, s) => acc + s.totalProfit, 0)
+  const totalWeight = summary.reduce((acc, s) => acc + s.totalWeight, 0)
+  const avgTicket = totalTickets > 0 ? totalValue / totalTickets : 0
+  const avgPriceOverall = totalWeight > 0 ? totalValue / totalWeight : 0
+  const topMaterial = summary.length > 0 ? summary.reduce((a, b) => a.totalWeight > b.totalWeight ? a : b) : null
+
+  // Build daily chart data
+  const chartData = useMemo(() => {
+    const daily: Record<string, { day: string; total: number }> = {}
+    const current = new Date(fromDate)
+    const end = new Date(toDate)
+    while (current <= end) {
+      const key = current.toISOString().slice(0, 10)
+      daily[key] = { day: String(current.getDate()), total: 0 }
+      current.setDate(current.getDate() + 1)
+    }
+    if (loading || summary.length === 0) return Object.values(daily)
+    return Object.values(daily)
+  }, [fromDate, toDate, loading, summary])
 
   const SortIcon = ({ columnKey }: { columnKey: SortKey }) => {
     const active = columnKey === sortKey
@@ -154,15 +238,9 @@ export function Dashboard({ onBack }: DashboardProps) {
   return (
     <div className="flex flex-col gap-6 w-full max-w-2xl mx-auto p-4">
       {/* Encabezado */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <BarChart3 className="size-5" />
-          <h1 className="text-xl font-semibold">Dashboard</h1>
-        </div>
-        <Button variant="outline" size="sm" onClick={onBack}>
-          <ArrowLeft className="size-3.5 mr-1.5" />
-          Volver
-        </Button>
+      <div className="flex items-center gap-2">
+        <BarChart3 className="size-5" />
+        <h1 className="text-xl font-semibold">Dashboard</h1>
       </div>
 
       {/* Selector de período */}
@@ -205,7 +283,6 @@ export function Dashboard({ onBack }: DashboardProps) {
         </CardContent>
       </Card>
 
-      {/* Resultados */}
       {loading && summary.length === 0 ? (
         <div className="flex justify-center py-10">
           <Loader2 className="size-8 animate-spin text-muted-foreground" />
@@ -218,31 +295,99 @@ export function Dashboard({ onBack }: DashboardProps) {
         </div>
       ) : (
         <>
-          {/* Cards resumen */}
-          <div className="grid grid-cols-3 gap-3">
-            <Card>
-              <CardContent className="p-4 text-center">
-                <p className="text-sm text-muted-foreground mb-1">Valor total</p>
-                <p className="text-3xl font-bold tabular-nums">$ {fmt(totalValue)}</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 text-center">
-                <p className="text-sm text-muted-foreground mb-1">Ganancia</p>
-                <p className={`text-3xl font-bold tabular-nums ${totalProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  $ {fmt(totalProfit)}
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 text-center">
-                <p className="text-sm text-muted-foreground mb-1">Tickets</p>
-                <p className="text-3xl font-bold tabular-nums">{totalTickets}</p>
-              </CardContent>
-            </Card>
+          {/* Stat Cards */}
+          <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+            <StatCard
+              title="Valor total"
+              value={`$ ${fmt(totalValue)}`}
+              icon={DollarSign}
+              color="bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"
+            />
+            <StatCard
+              title="Ganancia"
+              value={`$ ${fmt(totalProfit)}`}
+              icon={TrendingUp}
+              color="bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400"
+            />
+            <StatCard
+              title="Tickets"
+              value={String(totalTickets)}
+              icon={FileText}
+              color="bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400"
+            />
+            <StatCard
+              title="Ticket promedio"
+              value={`$ ${fmt(avgTicket)}`}
+              icon={ShoppingCart}
+              color="bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400"
+            />
           </div>
 
-          {/* Tabla */}
+          {/* Indicators */}
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+            {topMaterial && (
+              <IndicatorCard
+                label="Material top"
+                value={topMaterial.materialName}
+                icon={Scale}
+                color="text-cyan-500 bg-cyan-100 dark:bg-cyan-900/30 dark:text-cyan-400"
+                sub={`${fmtWeight(topMaterial.totalWeight)} kg · $ ${fmt(topMaterial.totalValue)}`}
+              />
+            )}
+            <IndicatorCard
+              label="Kilos totales"
+              value={`${fmtWeight(totalWeight)} kg`}
+              icon={Weight}
+              color="text-indigo-500 bg-indigo-100 dark:bg-indigo-900/30 dark:text-indigo-400"
+            />
+            <IndicatorCard
+              label="Precio promedio"
+              value={`$ ${fmt(avgPriceOverall)}`}
+              icon={BadgePercent}
+              color="text-rose-500 bg-rose-100 dark:bg-rose-900/30 dark:text-rose-400"
+            />
+          </div>
+
+          {/* Chart */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base font-medium">Evolución diaria</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[200px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData}>
+                    <defs>
+                      <linearGradient id="valueGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                    <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: 'var(--color-muted-foreground)' }} />
+                    <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: 'var(--color-muted-foreground)' }} tickFormatter={(v) => `$${fmt(v)}`} />
+                    <Tooltip
+                      contentStyle={{
+                        background: 'var(--color-card)',
+                        border: '1px solid var(--color-border)',
+                        borderRadius: '8px',
+                        fontSize: '13px',
+                      }}
+                      formatter={(value) => [`$ ${fmt(Number(value))}`, 'Total']}
+                    />
+                    <Area type="monotone" dataKey="total" stroke="#3b82f6" fill="url(#valueGrad)" strokeWidth={2} dot={false} />
+                    {chartData.length === 0 && (
+                      <text x="50%" y="50%" textAnchor="middle" fill="var(--color-muted-foreground)" fontSize={13}>
+                        Sin datos para este período
+                      </text>
+                    )}
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Tabla de materiales */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm text-muted-foreground">
@@ -256,7 +401,7 @@ export function Dashboard({ onBack }: DashboardProps) {
                     {columns.map((col) => (
                       <TableHead
                         key={col.key}
-                        className={`${col.numeric ? 'text-right' : ''} cursor-pointer select-none hover:bg-muted/50 hover:text-foreground transition-colors`}
+                        className={`${col.numeric ? 'text-right' : ''} cursor-pointer select-none hover:bg-muted/50 hover:text-foreground transition-colors text-xs uppercase tracking-wider`}
                         onClick={() => handleSort(col.key)}
                       >
                         {col.label}
@@ -266,13 +411,13 @@ export function Dashboard({ onBack }: DashboardProps) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {sorted.map((item) => (
-                    <TableRow key={item.materialName}>
+                  {sorted.map((item) => (
+                    <TableRow key={item.materialName} className="hover:bg-muted/50 transition-colors">
                       <TableCell className="font-medium">{item.materialName}</TableCell>
                       <TableCell className="text-right tabular-nums">{fmtWeight(item.totalWeight)}</TableCell>
                       <TableCell className="text-right tabular-nums font-medium">$ {fmt(item.totalValue)}</TableCell>
                       <TableCell className="text-right tabular-nums">$ {fmt(item.avgPrice)}</TableCell>
-                      <TableCell className={`text-right tabular-nums font-medium ${item.totalProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      <TableCell className={`text-right tabular-nums font-medium ${item.totalProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                         $ {fmt(item.totalProfit)}
                       </TableCell>
                     </TableRow>
@@ -281,21 +426,49 @@ export function Dashboard({ onBack }: DashboardProps) {
                 <TableHeader>
                   <TableRow className="border-t-2 border-primary/30 bg-primary/5 hover:bg-primary/5">
                     <TableHead className="font-bold text-base text-primary">Total</TableHead>
-                    <TableHead className="text-right font-bold text-base tabular-nums text-primary">{fmtWeight(
-                      sorted.reduce((a, i) => a + i.totalWeight, 0)
-                    )}</TableHead>
+                    <TableHead className="text-right font-bold text-base tabular-nums text-primary">{fmtWeight(totalWeight)}</TableHead>
                     <TableHead className="text-right font-bold text-base tabular-nums text-primary">$ {fmt(totalValue)}</TableHead>
-                    <TableHead className="text-right font-bold text-base tabular-nums text-primary">$ {fmt(
-                      sorted.reduce((a, i) => a + i.totalWeight, 0) > 0
-                        ? totalValue / sorted.reduce((a, i) => a + i.totalWeight, 0)
-                        : 0
-                    )}</TableHead>
-                    <TableHead className={`text-right font-bold text-base tabular-nums ${totalProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    <TableHead className="text-right font-bold text-base tabular-nums text-primary">$ {fmt(avgPriceOverall)}</TableHead>
+                    <TableHead className={`text-right font-bold text-base tabular-nums ${totalProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                       $ {fmt(totalProfit)}
                     </TableHead>
                   </TableRow>
                 </TableHeader>
               </Table>
+            </CardContent>
+          </Card>
+
+          {/* Últimos tickets */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base font-medium">Últimos tickets</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {recentTickets.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-6">No hay tickets recientes</p>
+              ) : (
+                <div className="divide-y">
+                  {recentTickets.map((t) => (
+                    <div
+                      key={t.id}
+                      className="flex items-center justify-between px-6 py-3 hover:bg-accent/50 transition-colors cursor-pointer"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">
+                          {t.items.map((i) => i.materialName).slice(0, 2).join(', ')}
+                          {t.items.length > 2 && ` +${t.items.length - 2}`}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {t.items.reduce((s, i) => s + (i.correctedWeight ?? 0), 0).toFixed(1)} kg · {timeAgo(t.createdAt)}
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0 ml-3">
+                        <p className="text-sm font-semibold tabular-nums">$ {fmt(t.total)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </>

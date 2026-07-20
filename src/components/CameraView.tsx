@@ -1,36 +1,35 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useCamera } from '@/hooks/useCamera'
 import { useGeminiOcr } from '@/hooks/useGeminiOcr'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
-import { Camera, ScanLine, RefreshCw, Loader2, ClipboardList, RotateCw } from 'lucide-react'
+import { Camera, ScanLine, RefreshCw, Loader2, RotateCw } from 'lucide-react'
 import { toast } from 'sonner'
-import type { OcrResult } from '@/types/ticket'
 
-interface CameraViewProps {
-  onResult: (imageUrl: string, result: OcrResult) => void
-  onManual: () => void
-}
-
-export function CameraView({ onResult, onManual }: CameraViewProps) {
+export function CameraView() {
+  const navigate = useNavigate()
   const { videoRef, status: camStatus, error: camError, start, stop, capture, rotated, toggleRotation } = useCamera()
   const { status: ocrStatus, result, progress, recognize, reset } = useGeminiOcr()
   const capturedUrlRef = useRef<string>('')
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
 
-  // Iniciar cámara automáticamente al montar
   useEffect(() => {
     start()
     return () => stop()
   }, [start, stop])
 
-  // Cuando el OCR termina con resultado, notificar al padre
   useEffect(() => {
     if (ocrStatus === 'done' && result) {
-      onResult(capturedUrlRef.current, result)
+      navigate('/editor', {
+        state: {
+          ocrResult: result,
+          capturedImageUrl: capturedUrlRef.current,
+        },
+      })
     }
-  }, [ocrStatus, result, onResult])
+  }, [ocrStatus, result, navigate])
 
   useEffect(() => {
     if (camError) toast.error(`Cámara: ${camError}`)
@@ -60,7 +59,6 @@ export function CameraView({ onResult, onManual }: CameraViewProps) {
         {camStatus === 'error' && <Badge variant="destructive">Sin cámara</Badge>}
       </div>
 
-      {/* Video feed */}
       <Card className="w-full overflow-hidden">
         <CardContent className="p-0 relative">
           <video
@@ -84,7 +82,6 @@ export function CameraView({ onResult, onManual }: CameraViewProps) {
         </CardContent>
       </Card>
 
-      {/* Preview imagen capturada — solo en DEV */}
       {import.meta.env.DEV && previewUrl && (
         <div className="w-full">
           <p className="text-xs text-muted-foreground mb-1">Imagen capturada:</p>
@@ -92,7 +89,6 @@ export function CameraView({ onResult, onManual }: CameraViewProps) {
         </div>
       )}
 
-      {/* Acciones */}
       <div className="flex gap-3 flex-wrap justify-center">
         <Button
           size="lg"
@@ -110,10 +106,6 @@ export function CameraView({ onResult, onManual }: CameraViewProps) {
         )}
         <Button variant="outline" size="icon" onClick={toggleRotation} title="Rotar 180°">
           <RotateCw className={`size-4 transition-transform ${rotated ? 'rotate-180 text-primary' : ''}`} />
-        </Button>
-        <Button variant="outline" size="lg" onClick={onManual}>
-          <ClipboardList className="size-4 mr-2" />
-          Boleta manual
         </Button>
       </div>
     </div>

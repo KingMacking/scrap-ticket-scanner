@@ -232,7 +232,35 @@ export function useTicketDb() {
     return { items, totalTickets: tickets?.length ?? 0 }
   }, [])
 
-  return { createTicket, getTickets, getTicket, updateTicket, deleteTicket, getMaterialSummary, loading, error }
+  const getRecentTickets = useCallback(async (limit = 10): Promise<Ticket[]> => {
+    setLoading(true)
+    setError(null)
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      setLoading(false)
+      return []
+    }
+
+    const { data: ticketRows, error: err } = await supabase
+      .from('tickets')
+      .select('*')
+      .eq('user_id', user.id)
+      .not('status', 'eq', 'cancelled')
+      .order('created_at', { ascending: false })
+      .limit(limit)
+
+    if (err) {
+      setError(err.message)
+      setLoading(false)
+      return []
+    }
+
+    setLoading(false)
+    return (ticketRows ?? []).map(mapRowToTicket)
+  }, [])
+
+  return { createTicket, getTickets, getTicket, updateTicket, deleteTicket, getMaterialSummary, getRecentTickets, loading, error }
 }
 
 let itemIdCounter = 0

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -10,14 +11,9 @@ import { useQzTray } from '@/hooks/useQzTray'
 import type { Ticket } from '@/types/ticket'
 import type { PrintItem } from '@/lib/buildEscPos'
 import {
-  ArrowLeft, Printer, Loader2, Wifi, WifiOff, History,
+  Printer, Loader2, Wifi, WifiOff, History,
 } from 'lucide-react'
 import { toast } from 'sonner'
-
-interface TicketDetailProps {
-  ticketId: string
-  onBack: () => void
-}
 
 const fmt = (n: number) =>
   Math.round(n).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
@@ -28,7 +24,9 @@ const statusLabel: Record<string, { label: string; color: 'secondary' | 'default
   cancelled: { label: 'Anulado', color: 'destructive' },
 }
 
-export function TicketDetail({ ticketId, onBack }: TicketDetailProps) {
+export function TicketDetail() {
+  const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const { getTicket, updateTicket } = useTicketDb()
   const { status: qzStatus, print: qzPrint, connect: qzConnect } = useQzTray()
   const [ticket, setTicket] = useState<Ticket | null>(null)
@@ -36,11 +34,12 @@ export function TicketDetail({ ticketId, onBack }: TicketDetailProps) {
   const [isPrinting, setIsPrinting] = useState(false)
 
   const load = useCallback(async () => {
+    if (!id) return
     setLoading(true)
-    const data = await getTicket(ticketId)
+    const data = await getTicket(id)
     setTicket(data)
     setLoading(false)
-  }, [ticketId, getTicket])
+  }, [id, getTicket])
 
   useEffect(() => {
     load()
@@ -91,7 +90,7 @@ export function TicketDetail({ ticketId, onBack }: TicketDetailProps) {
       <div className="flex flex-col items-center justify-center py-20 gap-2 text-muted-foreground">
         <History className="size-8 opacity-30" />
         <p className="text-sm">Ticket no encontrado</p>
-        <Button variant="outline" size="sm" onClick={onBack}>Volver</Button>
+        <Button variant="outline" size="sm" onClick={() => navigate('/history')}>Volver</Button>
       </div>
     )
   }
@@ -100,20 +99,12 @@ export function TicketDetail({ ticketId, onBack }: TicketDetailProps) {
 
   return (
     <div className="flex flex-col gap-6 w-full max-w-2xl mx-auto p-4">
-      {/* Encabezado */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <History className="size-5" />
-          <h1 className="text-xl font-semibold">Detalle del ticket</h1>
-          <Badge variant={st.color}>{st.label}</Badge>
-        </div>
-        <Button variant="outline" size="sm" onClick={onBack}>
-          <ArrowLeft className="size-3.5 mr-1.5" />
-          Volver
-        </Button>
+      <div className="flex items-center gap-2">
+        <History className="size-5" />
+        <h1 className="text-xl font-semibold">Detalle del ticket</h1>
+        <Badge variant={st.color}>{st.label}</Badge>
       </div>
 
-      {/* Info general */}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm text-muted-foreground">Información</CardTitle>
@@ -150,7 +141,6 @@ export function TicketDetail({ ticketId, onBack }: TicketDetailProps) {
         </CardContent>
       </Card>
 
-      {/* Items */}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm text-muted-foreground">
@@ -183,7 +173,6 @@ export function TicketDetail({ ticketId, onBack }: TicketDetailProps) {
         </CardContent>
       </Card>
 
-      {/* Acciones */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5 text-xs">
           {qzStatus === 'connected' && (

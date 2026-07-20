@@ -3,27 +3,18 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { ArrowLeft, Save, Trash2, Plus } from 'lucide-react'
+import { usePrices } from '@/hooks/usePrices'
+import { Save, Trash2, Plus } from 'lucide-react'
 import { toast } from 'sonner'
-import type { PricesMap, MaterialInfo } from '@/hooks/usePrices'
-
-interface PriceManagerProps {
-  prices: PricesMap
-  allMaterials: MaterialInfo[]
-  defaultMaterialOrders: Record<string, number>
-  onSave: (prices: PricesMap) => void
-  onAddMaterial: (name: string) => void
-  onRemoveMaterial: (name: string) => void
-  onSetDefaultMaterialOrders: (orders: Record<string, number>) => void
-  onBack: () => void
-}
 
 function nextOrder(orders: Record<string, number>): number {
   const vals = Object.values(orders)
   return vals.length > 0 ? Math.max(...vals) + 1 : 1
 }
 
-export function PriceManager({ prices, allMaterials, defaultMaterialOrders, onSave, onAddMaterial, onRemoveMaterial, onSetDefaultMaterialOrders, onBack }: PriceManagerProps) {
+export function PriceManager() {
+  const { prices, allMaterials, defaultMaterialOrders, saveAll, addMaterial, removeMaterial, setDefaultMaterialOrders } = usePrices()
+
   const [purchaseDraft, setPurchaseDraft] = useState<Record<string, string>>(() =>
     Object.fromEntries(
       allMaterials.map((mat) => [mat.name, prices[mat.name]?.purchase?.toString() ?? ''])
@@ -52,17 +43,17 @@ export function PriceManager({ prices, allMaterials, defaultMaterialOrders, onSa
     } else {
       next[name] = nextOrder(next)
     }
-    onSetDefaultMaterialOrders(next)
+    setDefaultMaterialOrders(next)
   }
 
   const changeOrder = (name: string, value: string) => {
     const num = parseInt(value, 10)
     if (isNaN(num) || num < 1) return
-    onSetDefaultMaterialOrders({ ...defaultMaterialOrders, [name]: num })
+    setDefaultMaterialOrders({ ...defaultMaterialOrders, [name]: num })
   }
 
   const handleSave = () => {
-    const next: PricesMap = {}
+    const next: Record<string, { purchase: number; sale: number }> = {}
     for (const mat of allMaterials) {
       const purchase = parseFloat(purchaseDraft[mat.name])
       const sale = parseFloat(saleDraft[mat.name])
@@ -76,11 +67,11 @@ export function PriceManager({ prices, allMaterials, defaultMaterialOrders, onSa
     if (newName.trim() && newPrice.trim()) {
       const val = parseFloat(newPrice)
       if (!isNaN(val) && val > 0) {
-        onAddMaterial(newName.trim())
+        addMaterial(newName.trim())
         next[newName.trim()] = { purchase: val, sale: val }
       }
     }
-    onSave(next)
+    saveAll(next)
     toast.success('Precios guardados')
   }
 
@@ -92,7 +83,7 @@ export function PriceManager({ prices, allMaterials, defaultMaterialOrders, onSa
     if (allMaterials.some((m) => m.name.toLowerCase() === name.toLowerCase())) {
       return toast.error('Ese material ya existe')
     }
-    onAddMaterial(name)
+    addMaterial(name)
     setPurchaseDraft((prev) => ({ ...prev, [name]: price.toString() }))
     setSaleDraft((prev) => ({ ...prev, [name]: price.toString() }))
     setNewName('')
@@ -102,14 +93,8 @@ export function PriceManager({ prices, allMaterials, defaultMaterialOrders, onSa
 
   return (
     <div className="flex flex-col gap-6 w-full max-w-2xl mx-auto p-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <h1 className="text-xl font-semibold">Precios por material</h1>
-        </div>
-        <Button variant="outline" size="sm" onClick={onBack}>
-          <ArrowLeft className="size-3.5 mr-1.5" />
-          Volver
-        </Button>
+      <div className="flex items-center">
+        <h1 className="text-xl font-semibold">Precios por material</h1>
       </div>
 
       <Card>
@@ -183,7 +168,7 @@ export function PriceManager({ prices, allMaterials, defaultMaterialOrders, onSa
                       <button
                         type="button"
                         onClick={() => {
-                          onRemoveMaterial(mat.name)
+                          removeMaterial(mat.name)
                           toast.success(`"${mat.name}" eliminado`)
                         }}
                         className="p-1 text-muted-foreground hover:text-destructive transition-colors"
@@ -200,7 +185,6 @@ export function PriceManager({ prices, allMaterials, defaultMaterialOrders, onSa
         </CardContent>
       </Card>
 
-      {/* Agregar material */}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium">Agregar material</CardTitle>

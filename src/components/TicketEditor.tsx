@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useForm, useWatch, useFieldArray } from 'react-hook-form'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -12,9 +13,12 @@ import {
   Wifi, WifiOff, Loader2, Trash2, Plus, ClipboardList,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import type { OcrResult, TicketItem } from '@/types/ticket'
-import type { PricesMap, MaterialInfo } from '@/hooks/usePrices'
+import { TicketPreview } from '@/components/TicketPreview'
+import { usePrices } from '@/hooks/usePrices'
+import { useTicketDb } from '@/hooks/useTicketDb'
 import { useQzTray } from '@/hooks/useQzTray'
+import type { OcrResult, TicketItem } from '@/types/ticket'
+import type { MaterialInfo } from '@/hooks/usePrices'
 import type { PrintItem } from '@/lib/buildEscPos'
 
 type RowInput = {
@@ -27,29 +31,34 @@ type FormInput = {
   items: RowInput[]
 }
 
-interface TicketEditorProps {
-  ocrResult: OcrResult
-  capturedImageUrl: string | null
-  prices: PricesMap
-  allMaterials: MaterialInfo[]
-  defaultMaterialIds?: string[]
-  onReset: () => void
-  onSave?: (items: TicketItem[], total: number) => Promise<string | null>
-  onMarkPrinted?: (ticketId: string) => Promise<void>
-}
-
 const fmt = (n: number) =>
   Math.round(n).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
 
-export function TicketEditor({ ocrResult, capturedImageUrl, prices, allMaterials, defaultMaterialIds, onReset, onSave, onMarkPrinted }: TicketEditorProps) {
-  const [showRawText, setShowRawText] = useState(false)
-  const [isPrinting, setIsPrinting] = useState(false)
-  const [savedTicketId, setSavedTicketId] = useState<string | null>(null)
-  const { status: qzStatus, print: qzPrint, connect: qzConnect } = useQzTray()
-
+export function TicketEditor() {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const state = location.state as { ocrResult?: OcrResult; capturedImageUrl?: string } | null
+  const ocrResult = state?.ocrResult ?? { items: [], rawText: '' }
+  const capturedImageUrl = state?.capturedImageUrl ?? null
   const isManual = ocrResult.items.length === 0 && !capturedImageUrl
 
-  // Materiales que aparecen como filas iniciales
+  const { prices, allMaterials, defaultMaterialOrders } = usePrices()
+  const { createTicket, updateTicket } = useTicketDb()
+  const { status: qzStatus, print: qzPrint, connect: qzConnect } = useQzTray()
+
+  const [showRawText, setShowRawText] = useState(false)
+  const [showPreview, setShowPreview] = useState(false)
+  const [isPrinting, setIsPrinting] = useState(false)
+  const [savedTicketId, setSavedTicketId] = useState<string | null>(null)
+
+  const defaultMaterialIds = useMemo(
+    () => Object.entries(defaultMaterialOrders)
+      .sort(([, a], [, b]) => a - b)
+      .map(([name]) => allMaterials.find((m) => m.name === name)?.id)
+      .filter((id): id is string => id !== undefined),
+    [defaultMaterialOrders, allMaterials]
+  )
+
   const detectedMaterials = isManual && defaultMaterialIds
     ? defaultMaterialIds
         .map((id) => allMaterials.find((mat) => mat.id === id))
@@ -84,7 +93,18 @@ export function TicketEditor({ ocrResult, capturedImageUrl, prices, allMaterials
 
   const total = subtotals.reduce<number>((acc, s) => acc + (s ?? 0), 0)
 
-  // Materiales que todavía no están en la lista
+  const previewItems = watchedItems.map((item) => {
+    const mat = allMaterials.find((m) => m.id === item?.materialId)
+    const w = parseFloat(item?.weight ?? '')
+    const p = parseFloat(item?.price ?? '')
+    return {
+      materialName: mat?.name ?? '',
+      weight: isNaN(w) ? 0 : w,
+      price: isNaN(p) ? 0 : p,
+      subtotal: isNaN(w) || isNaN(p) ? 0 : w * p,
+    }
+  })
+
   const usedIds = new Set(watchedItems.map((i) => i?.materialId))
   const availableToAdd = allMaterials.filter((m) => !usedIds.has(m.id))
 
@@ -96,58 +116,6 @@ export function TicketEditor({ ocrResult, capturedImageUrl, prices, allMaterials
       weight: '',
       price: prices[mat.name]?.purchase?.toString() ?? '',
     })
-  }
-
-  const onSubmit = async (data: FormInput) => {
-    setIsPrinting(true)
-    try {
-      const items = buildTicketItems(data)
-      if (items.length === 0) {
-        toast.error('Agregá al menos un material válido')
-        setIsPrinting(false)
-        return
-      }
-
-      const printItems: PrintItem[] = items.map((i) => ({
-        materialName: i.materialName,
-        weight: i.correctedWeight ?? 0,
-        price: i.price ?? 0,
-        subtotal: (i.correctedWeight ?? 0) * (i.price ?? 0),
-      }))
-
-      // 1. Save if not already saved
-      let ticketId = savedTicketId
-      if (!ticketId && onSave) {
-        ticketId = await onSave(items, total)
-        if (ticketId) setSavedTicketId(ticketId)
-      }
-
-      // 2. Print
-      await qzPrint({
-        items: printItems,
-        total,
-        date: new Date(),
-      })
-
-      // 3. Mark as printed
-      if (ticketId && onMarkPrinted) {
-        await onMarkPrinted(ticketId)
-      }
-
-      toast.success('Ticket guardado e impreso')
-
-      // En boleta manual: resetear el formulario con los materiales predeterminados
-      if (isManual) {
-        reset()
-        setSavedTicketId(null)
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Error al imprimir'
-      toast.error(msg)
-      console.error('[Print]', err)
-    } finally {
-      setIsPrinting(false)
-    }
   }
 
   const buildTicketItems = (data: FormInput): TicketItem[] =>
@@ -169,9 +137,59 @@ export function TicketEditor({ ocrResult, capturedImageUrl, prices, allMaterials
       })
       .filter((i): i is TicketItem => i !== null)
 
+  const onSubmit = async (data: FormInput) => {
+    setIsPrinting(true)
+    try {
+      const items = buildTicketItems(data)
+      if (items.length === 0) {
+        toast.error('Agregá al menos un material válido')
+        setIsPrinting(false)
+        return
+      }
+
+      const printItems: PrintItem[] = items.map((i) => ({
+        materialName: i.materialName,
+        weight: i.correctedWeight ?? 0,
+        price: i.price ?? 0,
+        subtotal: (i.correctedWeight ?? 0) * (i.price ?? 0),
+      }))
+
+      let ticketId = savedTicketId
+      if (!ticketId) {
+        ticketId = await createTicket({
+          items: items.map((i) => ({
+            materialName: i.materialName,
+            weight: i.correctedWeight ?? 0,
+            price: i.price ?? 0,
+          })),
+          total,
+        })
+        if (ticketId) setSavedTicketId(ticketId)
+      }
+
+      await qzPrint({ items: printItems, total, date: new Date() })
+
+      if (ticketId) {
+        await updateTicket(ticketId, { status: 'printed' })
+      }
+
+      toast.success('Ticket guardado e impreso')
+
+      if (isManual) {
+        reset()
+        setSavedTicketId(null)
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error al imprimir'
+      toast.error(msg)
+      console.error('[Print]', err)
+    } finally {
+      setIsPrinting(false)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6 w-full max-w-2xl mx-auto p-4">
-      {/* Encabezado */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           {isManual
@@ -186,13 +204,20 @@ export function TicketEditor({ ocrResult, capturedImageUrl, prices, allMaterials
             {fields.length} material{fields.length !== 1 ? 'es' : ''}
           </Badge>
         </div>
-        <Button variant="outline" size="sm" onClick={onReset}>
+        <Button variant="outline" size="sm" onClick={() => navigate(isManual ? '/' : '/scan')}>
           <RotateCcw className="size-3.5 mr-1.5" />
           {isManual ? 'Volver' : 'Nuevo escaneo'}
         </Button>
       </div>
 
-      {/* Imagen capturada */}
+      {/* Preview del ticket */}
+      <TicketPreview
+        items={previewItems}
+        total={total}
+        visible={showPreview}
+        onToggle={() => setShowPreview((v) => !v)}
+      />
+
       {capturedImageUrl && (
         <Card className="overflow-hidden print:hidden">
           <CardHeader className="pb-2">
@@ -204,7 +229,6 @@ export function TicketEditor({ ocrResult, capturedImageUrl, prices, allMaterials
         </Card>
       )}
 
-      {/* Tabla editable */}
       <form onSubmit={handleSubmit(onSubmit)}>
         <Card>
           <CardContent className="p-0">
@@ -271,7 +295,6 @@ export function TicketEditor({ ocrResult, capturedImageUrl, prices, allMaterials
           </CardContent>
         </Card>
 
-        {/* Botón agregar material */}
         {availableToAdd.length > 0 && (
           <div className="mt-3 flex items-center gap-2">
             <Plus className="size-4 text-muted-foreground shrink-0" />
@@ -288,7 +311,6 @@ export function TicketEditor({ ocrResult, capturedImageUrl, prices, allMaterials
           </div>
         )}
 
-        {/* Total */}
         <div className="flex justify-between items-center mt-4 px-1 border-t pt-4">
           <span className="text-lg font-semibold text-muted-foreground">Total</span>
           <span className="text-4xl font-bold tracking-tight tabular-nums">
@@ -296,7 +318,6 @@ export function TicketEditor({ ocrResult, capturedImageUrl, prices, allMaterials
           </span>
         </div>
 
-        {/* Acciones */}
         <div className="flex justify-between items-center mt-6">
           <div className="flex items-center gap-2">
             {savedTicketId && (
@@ -305,7 +326,6 @@ export function TicketEditor({ ocrResult, capturedImageUrl, prices, allMaterials
                 Guardado
               </span>
             )}
-            {/* Indicador QZ Tray */}
             <div className="flex items-center gap-1.5 text-xs">
               {qzStatus === 'connected' && (
                 <><Wifi className="size-3.5 text-green-600" /><span className="text-green-600">Impresora conectada</span></>
@@ -335,7 +355,6 @@ export function TicketEditor({ ocrResult, capturedImageUrl, prices, allMaterials
         </div>
       </form>
 
-      {/* Panel debug OCR */}
       {import.meta.env.DEV && (
         <div className="print:hidden">
           <button
