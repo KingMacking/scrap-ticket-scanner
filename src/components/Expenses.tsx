@@ -9,6 +9,7 @@ import {
   Wallet, Users, Wrench, Loader2, Plus, Trash2, Pencil, X, Settings2, RotateCcw,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { BackButton } from '@/components/BackButton'
 
 const fmt = (n: number) =>
   Math.round(n).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
@@ -202,6 +203,7 @@ export function Expenses() {
         <Wallet className="size-5" />
         <h1 className="text-xl font-semibold">Gastos</h1>
         <Badge variant="outline">{expenses.length} registro{expenses.length !== 1 ? 's' : ''}</Badge>
+        <div className="ml-auto"><BackButton /></div>
       </div>
 
       {/* Tabs */}

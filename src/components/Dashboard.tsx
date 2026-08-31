@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { Area, AreaChart, BarChart, Bar, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { Ticket } from '@/types/ticket'
+import { BackButton } from '@/components/BackButton'
 
 const fmt = (n: number) =>
   Math.round(n).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
@@ -216,7 +217,7 @@ export function Dashboard() {
   const totalWeight = summary.reduce((acc, s) => acc + s.totalWeight, 0)
   const avgTicket = totalTickets > 0 ? totalValue / totalTickets : 0
   const avgPriceOverall = totalWeight > 0 ? totalValue / totalWeight : 0
-  const topMaterial = summary.length > 0 ? summary.reduce((a, b) => a.totalWeight > b.totalWeight ? a : b) : null
+  const topMaterial = summary.length > 0 ? summary.reduce((a, b) => a.totalProfit > b.totalProfit ? a : b) : null
 
   const SortIcon = ({ columnKey }: { columnKey: SortKey }) => {
     const active = columnKey === sortKey
@@ -232,6 +233,7 @@ export function Dashboard() {
       <div className="flex items-center gap-2">
         <BarChart3 className="size-5" />
         <h1 className="text-xl font-semibold">Dashboard</h1>
+        <div className="ml-auto"><BackButton /></div>
       </div>
 
       {/* Selector de período */}
@@ -316,7 +318,7 @@ export function Dashboard() {
                 value={topMaterial.materialName}
                 icon={Scale}
                 color="text-cyan-500 bg-cyan-100 dark:bg-cyan-900/30 dark:text-cyan-400"
-                sub={`${fmtWeight(topMaterial.totalWeight)} kg · $ ${fmt(topMaterial.totalValue)}`}
+                sub={`Ganancia: $ ${fmt(topMaterial.totalProfit)} · ${fmtWeight(topMaterial.totalWeight)} kg`}
               />
             )}
             <IndicatorCard

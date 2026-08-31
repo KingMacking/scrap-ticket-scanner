@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Camera, ScanLine, RefreshCw, Loader2, RotateCw } from 'lucide-react'
 import { toast } from 'sonner'
+import { BackButton } from '@/components/BackButton'
 
 export function CameraView() {
   const navigate = useNavigate()
@@ -57,6 +58,7 @@ export function CameraView() {
         {camStatus === 'active' && <Badge variant="secondary">Cámara activa</Badge>}
         {camStatus === 'requesting' && <Badge variant="outline">Conectando...</Badge>}
         {camStatus === 'error' && <Badge variant="destructive">Sin cámara</Badge>}
+        <div className="ml-auto"><BackButton /></div>
       </div>
 
       <Card className="w-full overflow-hidden">

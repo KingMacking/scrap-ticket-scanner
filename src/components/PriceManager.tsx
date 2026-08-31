@@ -8,6 +8,7 @@ import { useQzTray } from '@/hooks/useQzTray'
 import { buildPriceListEscPos } from '@/lib/buildEscPos'
 import { Save, Trash2, Plus, Printer, X, Loader2, Wifi, WifiOff } from 'lucide-react'
 import { toast } from 'sonner'
+import { BackButton } from '@/components/BackButton'
 
 function nextOrder(orders: Record<string, number>): number {
   const vals = Object.values(orders)
@@ -148,6 +149,7 @@ export function PriceManager() {
     <div className="flex flex-col gap-6 w-full max-w-2xl mx-auto p-4">
       <div className="flex items-center">
         <h1 className="text-xl font-semibold">Precios por material</h1>
+        <div className="ml-auto"><BackButton /></div>
       </div>
 
       <Card>

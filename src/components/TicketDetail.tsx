@@ -14,6 +14,7 @@ import {
   Printer, Loader2, Wifi, WifiOff, History,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { BackButton } from '@/components/BackButton'
 
 const fmt = (n: number) =>
   Math.round(n).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
@@ -103,6 +104,7 @@ export function TicketDetail() {
         <History className="size-5" />
         <h1 className="text-xl font-semibold">Detalle del ticket</h1>
         <Badge variant={st.color}>{st.label}</Badge>
+        <div className="ml-auto"><BackButton /></div>
       </div>
 
       <Card>
