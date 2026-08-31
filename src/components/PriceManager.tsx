@@ -4,7 +4,9 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { usePrices } from '@/hooks/usePrices'
-import { Save, Trash2, Plus } from 'lucide-react'
+import { useQzTray } from '@/hooks/useQzTray'
+import { buildPriceListEscPos } from '@/lib/buildEscPos'
+import { Save, Trash2, Plus, Printer, X, Loader2, Wifi, WifiOff } from 'lucide-react'
 import { toast } from 'sonner'
 
 function nextOrder(orders: Record<string, number>): number {
@@ -14,6 +16,7 @@ function nextOrder(orders: Record<string, number>): number {
 
 export function PriceManager() {
   const { prices, allMaterials, defaultMaterialOrders, saveAll, addMaterial, removeMaterial, setDefaultMaterialOrders } = usePrices()
+  const { status: qzStatus, printRaw, connect: qzConnect } = useQzTray()
 
   const [purchaseDraft, setPurchaseDraft] = useState<Record<string, string>>(() =>
     Object.fromEntries(
@@ -27,6 +30,56 @@ export function PriceManager() {
   )
   const [newName, setNewName] = useState('')
   const [newPrice, setNewPrice] = useState('')
+
+  // Lista de precios imprimible
+  const [showPrintPanel, setShowPrintPanel] = useState(false)
+  const [printSel, setPrintSel] = useState<Record<string, boolean>>({})
+  const [printDraft, setPrintDraft] = useState<Record<string, string>>({})
+  const [isPrinting, setIsPrinting] = useState(false)
+
+  const openPrintPanel = () => {
+    setPrintSel(Object.fromEntries(allMaterials.map((m) => [m.name, false])))
+    setPrintDraft(
+      Object.fromEntries(
+        allMaterials.map((m) => [m.name, (prices[m.name]?.purchase ?? '').toString()])
+      )
+    )
+    setShowPrintPanel(true)
+  }
+
+  const togglePrintSel = (name: string) => {
+    setPrintSel((prev) => ({ ...prev, [name]: !prev[name] }))
+  }
+
+  const handlePrintPriceChange = (name: string, value: string) => {
+    setPrintDraft((prev) => ({ ...prev, [name]: value }))
+  }
+
+  const doPrintPriceList = async () => {
+    const items = allMaterials
+      .filter((m) => printSel[m.name])
+      .map((m) => ({ name: m.name, price: parseFloat(printDraft[m.name]) }))
+      .filter((it) => !isNaN(it.price) && it.price > 0)
+
+    if (items.length === 0) {
+      toast.error('Seleccioná al menos un material con precio válido')
+      return
+    }
+
+    setIsPrinting(true)
+    try {
+      const lines = buildPriceListEscPos({ items, date: new Date() })
+      await printRaw(lines)
+      toast.success('Lista de precios impresa')
+      setShowPrintPanel(false)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error al imprimir'
+      toast.error(msg)
+      console.error('[Print price list]', err)
+    } finally {
+      setIsPrinting(false)
+    }
+  }
 
   const handlePurchaseChange = (name: string, value: string) => {
     setPurchaseDraft((prev) => ({ ...prev, [name]: value }))
@@ -217,12 +270,102 @@ export function PriceManager() {
         </CardContent>
       </Card>
 
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" onClick={openPrintPanel} size="lg">
+          <Printer className="size-4 mr-2" />
+          Imprimir
+        </Button>
         <Button onClick={handleSave} size="lg">
           <Save className="size-4 mr-2" />
           Guardar precios
         </Button>
       </div>
+
+      {/* Modal: lista de precios imprimible */}
+      {showPrintPanel && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <Card className="w-full max-w-lg max-h-[85vh] flex flex-col">
+            <CardHeader className="pb-2 flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-base font-medium">Imprimir lista de precios</CardTitle>
+                <p className="text-xs mt-1 flex items-center gap-1.5">
+                  {qzStatus === 'connected' && <><Wifi className="size-3 text-green-600" /><span className="text-green-600">Impresora conectada</span></>}
+                  {qzStatus === 'connecting' && <><Loader2 className="size-3 animate-spin" />Conectando...</>}
+                  {(qzStatus === 'disconnected' || qzStatus === 'error') && (
+                    <button type="button" onClick={qzConnect} className="text-destructive hover:underline">
+                      <WifiOff className="size-3 inline mr-1" />
+                      QZ Tray sin conexión — reintentar
+                    </button>
+                  )}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPrintPanel(false)}
+                className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="Cerrar"
+              >
+                <X className="size-5" />
+              </button>
+            </CardHeader>
+            <div className="px-4 py-2 flex items-center justify-between border-y">
+              <span className="text-xs font-medium text-muted-foreground">
+                Marcá los precios a imprimir
+              </span>
+              <span className="text-xs text-muted-foreground">Precios ($/kg)</span>
+            </div>
+            <CardContent className="p-0 overflow-y-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-10" />
+                    <TableHead>Material</TableHead>
+                    <TableHead className="text-right w-24">Compra ($/kg)</TableHead>
+                    <TableHead className="text-right w-24">Venta ($/kg)</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {allMaterials.map((mat) => (
+                    <TableRow key={mat.id}>
+                      <TableCell className="text-center">
+                        <input
+                          type="checkbox"
+                          checked={!!printSel[mat.name]}
+                          onChange={() => togglePrintSel(mat.name)}
+                          className="size-4 accent-primary cursor-pointer"
+                        />
+                      </TableCell>
+                      <TableCell className="font-medium">{mat.name}</TableCell>
+                      <TableCell className="text-right">
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={printDraft[mat.name] ?? ''}
+                          onChange={(e) => handlePrintPriceChange(mat.name, e.target.value)}
+                          className="w-24 ml-auto [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                        />
+                      </TableCell>
+                      <TableCell className="text-right text-muted-foreground tabular-nums">
+                        {prices[mat.name]?.sale != null ? prices[mat.name]!.sale.toLocaleString('es-AR') : '—'}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+            <div className="p-3 border-t flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setShowPrintPanel(false)} disabled={isPrinting}>
+                Cancelar
+              </Button>
+              <Button onClick={doPrintPriceList} disabled={isPrinting}>
+                {isPrinting ? <Loader2 className="size-4 mr-2 animate-spin" /> : <Printer className="size-4 mr-2" />}
+                Imprimir
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
     </div>
   )
 }

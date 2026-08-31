@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Camera, ClipboardList, BarChart3, History, Settings } from 'lucide-react'
+import { Camera, ClipboardList, BarChart3, History, Settings, Wallet } from 'lucide-react'
 
 export function HomeScreen() {
   const navigate = useNavigate()
@@ -59,6 +59,10 @@ export function HomeScreen() {
         <Button variant="ghost" size="sm" onClick={() => navigate('/history')}>
           <History className="size-4 mr-1.5" />
           Historial
+        </Button>
+        <Button variant="ghost" size="sm" onClick={() => navigate('/expenses')}>
+          <Wallet className="size-4 mr-1.5" />
+          Gastos
         </Button>
         <Button variant="ghost" size="sm" onClick={() => navigate('/settings')}>
           <Settings className="size-4 mr-1.5" />

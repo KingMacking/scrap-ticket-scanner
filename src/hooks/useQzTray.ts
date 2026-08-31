@@ -89,7 +89,7 @@ export function useQzTray() {
     setPrinterName(null)
   }, [])
 
-  const print = useCallback(async (data: PrintTicketData, targetPrinter?: string): Promise<void> => {
+  const printRaw = useCallback(async (escPosLines: string[], targetPrinter?: string): Promise<void> => {
     if (status !== 'connected') {
       await connect()
     }
@@ -108,7 +108,6 @@ export function useQzTray() {
       copies: 1,
     })
 
-    const escPosLines = buildEscPos(data)
     const printData = escPosLines.map((chunk) => ({
       type: 'raw',
       format: 'plain',
@@ -119,10 +118,14 @@ export function useQzTray() {
     console.log('[QZ Tray] trabajo enviado a:', printer)
   }, [status, connect, printerName])
 
+  const print = useCallback(async (data: PrintTicketData, targetPrinter?: string): Promise<void> => {
+    await printRaw(buildEscPos(data), targetPrinter)
+  }, [printRaw])
+
   useEffect(() => {
     connect()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  return { status, printerName, connect, disconnect, print }
+  return { status, printerName, connect, disconnect, print, printRaw }
 }

@@ -9,6 +9,7 @@ import { LoginView } from '@/components/LoginView'
 import { TicketHistory } from '@/components/TicketHistory'
 import { TicketDetail } from '@/components/TicketDetail'
 import { Dashboard } from '@/components/Dashboard'
+import { Expenses } from '@/components/Expenses'
 import { AppLayout } from '@/components/AppLayout'
 import { useAuth } from '@/hooks/useAuth'
 import { Loader2 } from 'lucide-react'
@@ -46,6 +47,7 @@ function AppRoutes() {
         <Route path="/editor" element={<TicketEditor />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/history" element={<TicketHistory />} />
+        <Route path="/expenses" element={<Expenses />} />
         <Route path="/ticket/:id" element={<TicketDetail />} />
         <Route path="/settings" element={<PriceManager />} />
       </Route>

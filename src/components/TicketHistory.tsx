@@ -3,13 +3,14 @@ import { useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { useTicketDb } from '@/hooks/useTicketDb'
+import { useTicketDb, type TicketSortKey, type TicketSortDir } from '@/hooks/useTicketDb'
 import { useQzTray } from '@/hooks/useQzTray'
+import { usePrices } from '@/hooks/usePrices'
 import type { Ticket } from '@/types/ticket'
 import type { PrintItem } from '@/lib/buildEscPos'
 import {
   History, Printer, Loader2, Trash2,
-  Wifi, WifiOff, ChevronDown,
+  Wifi, WifiOff, ChevronDown, RotateCcw,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -24,21 +25,100 @@ const statusLabel: Record<string, { label: string; color: 'secondary' | 'default
 
 const PAGE_SIZE = 20
 
+function todayStart(): Date {
+  const d = new Date()
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+function todayEnd(): Date {
+  const d = new Date()
+  d.setHours(23, 59, 59, 999)
+  return d
+}
+function weekStart(): Date {
+  const d = new Date()
+  const day = d.getDay()
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1)
+  d.setDate(diff)
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+function monthStart(): Date {
+  const d = new Date()
+  d.setDate(1)
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+function monthEnd(): Date {
+  const d = new Date()
+  d.setMonth(d.getMonth() + 1)
+  d.setDate(0)
+  d.setHours(23, 59, 59, 999)
+  return d
+}
+function noFilter(): { from: Date | null; to: Date | null } {
+  return { from: null, to: null }
+}
+
+const sortOptions: { key: TicketSortKey; dir: TicketSortDir; label: string }[] = [
+  { key: 'created_at', dir: 'desc', label: 'Más recientes' },
+  { key: 'created_at', dir: 'asc', label: 'Más antiguos' },
+  { key: 'total', dir: 'desc', label: 'Boleta más cara' },
+  { key: 'total', dir: 'asc', label: 'Boleta más barata' },
+]
+
 export function TicketHistory() {
   const navigate = useNavigate()
   const { getTickets, deleteTicket, updateTicket, loading } = useTicketDb()
+  const { allMaterials } = usePrices()
   const [tickets, setTickets] = useState<Ticket[]>([])
   const [total, setTotal] = useState(0)
   const [offset, setOffset] = useState(0)
   const [loadingMore, setLoadingMore] = useState(false)
   const { status: qzStatus, print: qzPrint, connect: qzConnect } = useQzTray()
 
+  const [fromDate, setFromDate] = useState<Date | null>(todayStart())
+  const [toDate, setToDate] = useState<Date | null>(todayEnd())
+  const [material, setMaterial] = useState('all')
+  const [sortIdx, setSortIdx] = useState(0)
+
+  const preset = (mode: 'today' | 'week' | 'month' | 'all') => {
+    if (mode === 'all') {
+      const { from, to } = noFilter()
+      setFromDate(from)
+      setToDate(to)
+      return
+    }
+    if (mode === 'today') {
+      setFromDate(todayStart())
+      setToDate(todayEnd())
+      return
+    }
+    if (mode === 'week') {
+      setFromDate(weekStart())
+      setToDate(todayEnd())
+      return
+    }
+    setFromDate(monthStart())
+    setToDate(monthEnd())
+  }
+
   const load = useCallback(async () => {
-    const result = await getTickets(PAGE_SIZE, 0)
+    const from = fromDate ? fromDate.toISOString() : undefined
+    const to = toDate ? toDate.toISOString() : undefined
+    const result = await getTickets({
+      limit: PAGE_SIZE,
+      offset: 0,
+      from,
+      to,
+      material: material === 'all' ? undefined : material,
+      sortBy: sortOptions[sortIdx].key,
+      sortDir: sortOptions[sortIdx].dir,
+    })
     setTickets(result.tickets)
     setTotal(result.total)
     setOffset(PAGE_SIZE)
-  }, [getTickets])
+  }, [getTickets, fromDate, toDate, material, sortIdx])
 
   useEffect(() => {
     load()
@@ -46,7 +126,17 @@ export function TicketHistory() {
 
   const loadMore = async () => {
     setLoadingMore(true)
-    const result = await getTickets(PAGE_SIZE, offset)
+    const from = fromDate ? fromDate.toISOString() : undefined
+    const to = toDate ? toDate.toISOString() : undefined
+    const result = await getTickets({
+      limit: PAGE_SIZE,
+      offset,
+      from,
+      to,
+      material: material === 'all' ? undefined : material,
+      sortBy: sortOptions[sortIdx].key,
+      sortDir: sortOptions[sortIdx].dir,
+    })
     setTickets((prev) => [...prev, ...result.tickets])
     setOffset((prev) => prev + PAGE_SIZE)
     setLoadingMore(false)
@@ -89,6 +179,18 @@ export function TicketHistory() {
     }
   }
 
+  const resetFilters = () => {
+    setFromDate(null)
+    setToDate(null)
+    setMaterial('all')
+    setSortIdx(0)
+  }
+
+  const hasActiveFilters = fromDate !== null || toDate !== null || material !== 'all' || sortIdx !== 0
+
+  const inputCls =
+    'text-sm border rounded-md px-2 py-1.5 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring'
+
   return (
     <div className="flex flex-col gap-6 w-full max-w-2xl mx-auto p-4">
       <div className="flex items-center gap-2">
@@ -116,6 +218,89 @@ export function TicketHistory() {
         )}
       </div>
 
+      {/* Filtros */}
+      <Card>
+        <CardContent className="p-3">
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex gap-2 flex-wrap">
+                <Button variant="outline" size="sm" onClick={() => preset('today')}>Hoy</Button>
+                <Button variant="outline" size="sm" onClick={() => preset('week')}>Esta semana</Button>
+                <Button variant="outline" size="sm" onClick={() => preset('month')}>Este mes</Button>
+                <Button variant="outline" size="sm" onClick={() => preset('all')}>Todo</Button>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={resetFilters}
+                disabled={!hasActiveFilters}
+                className="text-muted-foreground"
+              >
+                <RotateCcw className="size-3.5 mr-1" />
+                Limpiar
+              </Button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-muted-foreground">Desde</label>
+                <input
+                  type="date"
+                  value={fromDate ? fromDate.toISOString().slice(0, 10) : ''}
+                  onChange={(e) => {
+                    if (!e.target.value) { setFromDate(null); return }
+                    const d = new Date(e.target.value + 'T00:00:00')
+                    if (!isNaN(d.getTime())) setFromDate(d)
+                  }}
+                  className={inputCls}
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-muted-foreground">Hasta</label>
+                <input
+                  type="date"
+                  value={toDate ? toDate.toISOString().slice(0, 10) : ''}
+                  onChange={(e) => {
+                    if (!e.target.value) { setToDate(null); return }
+                    const d = new Date(e.target.value + 'T23:59:59')
+                    if (!isNaN(d.getTime())) setToDate(d)
+                  }}
+                  className={inputCls}
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-muted-foreground">Ordenar</label>
+                <select
+                  value={sortIdx}
+                  onChange={(e) => setSortIdx(Number(e.target.value))}
+                  className={inputCls}
+                >
+                  {sortOptions.map((o, i) => (
+                    <option key={o.label} value={i}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-muted-foreground">Material</label>
+                <select
+                  value={material}
+                  onChange={(e) => setMaterial(e.target.value)}
+                  className={inputCls}
+                >
+                  <option value="all">Todos</option>
+                  {allMaterials.map((m) => (
+                    <option key={m.id} value={m.name}>{m.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {loading && tickets.length === 0 ? (
         <div className="flex justify-center py-10">
           <Loader2 className="size-8 animate-spin text-muted-foreground" />
@@ -123,7 +308,9 @@ export function TicketHistory() {
       ) : tickets.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-10 gap-2 text-muted-foreground">
           <History className="size-8 opacity-30" />
-          <p className="text-sm">Todavía no hay tickets guardados</p>
+          <p className="text-sm">
+            {hasActiveFilters ? 'No hay tickets que coincidan con los filtros' : 'Todavía no hay tickets guardados'}
+          </p>
         </div>
       ) : (
         <div className="flex flex-col gap-3">

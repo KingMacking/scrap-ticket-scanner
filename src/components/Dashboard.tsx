@@ -9,9 +9,9 @@ import { usePrices } from '@/hooks/usePrices'
 import {
   BarChart3, Loader2, ChevronUp, ChevronDown,
   DollarSign, TrendingUp, FileText, ShoppingCart, Scale,
-  Weight, BadgePercent,
+  Weight,
 } from 'lucide-react'
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Area, AreaChart, BarChart, Bar, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { Ticket } from '@/types/ticket'
 
 const fmt = (n: number) =>
@@ -171,7 +171,8 @@ export function Dashboard() {
   const [summary, setSummary] = useState<MaterialSummaryItem[]>([])
   const [totalTickets, setTotalTickets] = useState(0)
   const [recentTickets, setRecentTickets] = useState<Ticket[]>([])
-  const { getMaterialSummary, getRecentTickets, loading, error: dbError } = useTicketDb()
+  const [dailyTotals, setDailyTotals] = useState<{ day: string; total: number }[]>([])
+  const { getMaterialSummary, getRecentTickets, getDailyTotals, loading, error: dbError } = useTicketDb()
   const { prices } = usePrices()
   const [sortKey, setSortKey] = useState<SortKey>('totalValue')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
@@ -180,12 +181,16 @@ export function Dashboard() {
   const to = toDate.toISOString()
 
   const load = useCallback(async () => {
-    const result = await getMaterialSummary(from, to, prices)
-    setSummary(result.items)
-    setTotalTickets(result.totalTickets)
-    const recent = await getRecentTickets(10)
+    const [summaryResult, recent, daily] = await Promise.all([
+      getMaterialSummary(from, to, prices),
+      getRecentTickets(10),
+      getDailyTotals(from, to),
+    ])
+    setSummary(summaryResult.items)
+    setTotalTickets(summaryResult.totalTickets)
     setRecentTickets(recent)
-  }, [from, to, prices, getMaterialSummary, getRecentTickets])
+    setDailyTotals(daily)
+  }, [from, to, prices, getMaterialSummary, getRecentTickets, getDailyTotals])
 
   useEffect(() => {
     load()
@@ -213,20 +218,6 @@ export function Dashboard() {
   const avgPriceOverall = totalWeight > 0 ? totalValue / totalWeight : 0
   const topMaterial = summary.length > 0 ? summary.reduce((a, b) => a.totalWeight > b.totalWeight ? a : b) : null
 
-  // Build daily chart data
-  const chartData = useMemo(() => {
-    const daily: Record<string, { day: string; total: number }> = {}
-    const current = new Date(fromDate)
-    const end = new Date(toDate)
-    while (current <= end) {
-      const key = current.toISOString().slice(0, 10)
-      daily[key] = { day: String(current.getDate()), total: 0 }
-      current.setDate(current.getDate() + 1)
-    }
-    if (loading || summary.length === 0) return Object.values(daily)
-    return Object.values(daily)
-  }, [fromDate, toDate, loading, summary])
-
   const SortIcon = ({ columnKey }: { columnKey: SortKey }) => {
     const active = columnKey === sortKey
     const Icon = active
@@ -236,7 +227,7 @@ export function Dashboard() {
   }
 
   return (
-    <div className="flex flex-col gap-6 w-full max-w-2xl mx-auto p-4">
+    <div className="flex flex-col gap-6 w-full max-w-5xl mx-auto p-4">
       {/* Encabezado */}
       <div className="flex items-center gap-2">
         <BarChart3 className="size-5" />
@@ -296,7 +287,7 @@ export function Dashboard() {
       ) : (
         <>
           {/* Stat Cards */}
-          <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-3">
             <StatCard
               title="Valor total"
               value={`$ ${fmt(totalValue)}`}
@@ -314,12 +305,6 @@ export function Dashboard() {
               value={String(totalTickets)}
               icon={FileText}
               color="bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400"
-            />
-            <StatCard
-              title="Ticket promedio"
-              value={`$ ${fmt(avgTicket)}`}
-              icon={ShoppingCart}
-              color="bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400"
             />
           </div>
 
@@ -341,51 +326,75 @@ export function Dashboard() {
               color="text-indigo-500 bg-indigo-100 dark:bg-indigo-900/30 dark:text-indigo-400"
             />
             <IndicatorCard
-              label="Precio promedio"
-              value={`$ ${fmt(avgPriceOverall)}`}
-              icon={BadgePercent}
-              color="text-rose-500 bg-rose-100 dark:bg-rose-900/30 dark:text-rose-400"
+              label="Ticket promedio"
+              value={`$ ${fmt(avgTicket)}`}
+              icon={ShoppingCart}
+              color="text-amber-500 bg-amber-100 dark:bg-amber-900/30 dark:text-amber-400"
             />
           </div>
 
-          {/* Chart */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base font-medium">Evolución diaria</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[200px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartData}>
-                    <defs>
-                      <linearGradient id="valueGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-                    <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: 'var(--color-muted-foreground)' }} />
-                    <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: 'var(--color-muted-foreground)' }} tickFormatter={(v) => `$${fmt(v)}`} />
-                    <Tooltip
-                      contentStyle={{
-                        background: 'var(--color-card)',
-                        border: '1px solid var(--color-border)',
-                        borderRadius: '8px',
-                        fontSize: '13px',
-                      }}
-                      formatter={(value) => [`$ ${fmt(Number(value))}`, 'Total']}
-                    />
-                    <Area type="monotone" dataKey="total" stroke="#3b82f6" fill="url(#valueGrad)" strokeWidth={2} dot={false} />
-                    {chartData.length === 0 && (
-                      <text x="50%" y="50%" textAnchor="middle" fill="var(--color-muted-foreground)" fontSize={13}>
-                        Sin datos para este período
-                      </text>
-                    )}
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
+          {/* Charts */}
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base font-medium">Evolución diaria</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[200px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={dailyTotals}>
+                      <defs>
+                        <linearGradient id="valueGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                      <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: 'var(--color-muted-foreground)' }} />
+                      <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: 'var(--color-muted-foreground)' }} tickFormatter={(v) => `$${fmt(v)}`} />
+                      <Tooltip
+                        contentStyle={{
+                          background: 'var(--color-card)',
+                          border: '1px solid var(--color-border)',
+                          borderRadius: '8px',
+                          fontSize: '13px',
+                        }}
+                        formatter={(value) => [`$ ${fmt(Number(value))}`, 'Total']}
+                      />
+                      <Area type="monotone" dataKey="total" stroke="#3b82f6" fill="url(#valueGrad)" strokeWidth={2} dot={false} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base font-medium">Materiales</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[200px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={summary} layout="vertical" margin={{ left: 0, right: 0, top: 4, bottom: 4 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" horizontal={false} />
+                      <XAxis type="number" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: 'var(--color-muted-foreground)' }} tickFormatter={(v) => `$${fmt(v)}`} />
+                      <YAxis type="category" dataKey="materialName" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: 'var(--color-foreground)' }} width={90} />
+                      <Tooltip
+                        contentStyle={{
+                          background: 'var(--color-card)',
+                          border: '1px solid var(--color-border)',
+                          borderRadius: '8px',
+                          fontSize: '13px',
+                        }}
+                        formatter={(value) => [`$ ${fmt(Number(value))}`, 'Total']}
+                      />
+                      <Bar dataKey="totalValue" fill="#3b82f6" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
 
           {/* Tabla de materiales */}
           <Card>

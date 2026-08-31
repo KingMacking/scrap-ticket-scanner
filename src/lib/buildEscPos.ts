@@ -59,6 +59,14 @@ function fmtNum(n: number): string {
   })
 }
 
+/** Dos columnas: izquierda y derecha (alineada a la derecha) */
+function row2(left: string, right: string, rightW = 14): string {
+  const leftW = COLS - rightW - 1
+  const truncated = left.length > leftW ? left.slice(0, leftW - 1) + '…' : left
+  const rightPad = Math.max(1, rightW - right.length)
+  return line(truncated + ' '.repeat(leftW - truncated.length + 1) + ' '.repeat(rightPad) + right)
+}
+
 export interface PrintItem {
   materialName: string
   weight: number
@@ -115,6 +123,65 @@ export function buildEscPos(data: PrintTicketData): string[] {
   push(CMD.DOUBLE_SIZE_OFF, CMD.BOLD_OFF)
 
   // Espacio y corte
+  push(CMD.FEED_4)
+  push(CMD.CUT)
+
+  return lines
+}
+
+export interface PrintPriceItem {
+  name: string
+  price: number
+}
+
+export interface PrintPriceListData {
+  items: PrintPriceItem[]
+  date: Date
+}
+
+/** Genera una lista de precios (para entregar a clientes) con el mismo estilo de ticket. */
+export function buildPriceListEscPos(data: PrintPriceListData): string[] {
+  const { items, date } = data
+
+  const dateStr = date.toLocaleDateString('es-AR', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+  })
+  const timeStr = date.toLocaleTimeString('es-AR', {
+    hour: '2-digit', minute: '2-digit',
+  })
+
+  const lines: string[] = []
+  const push = (...cmds: string[]) => lines.push(...cmds)
+
+  push(CMD.INIT)
+
+  // Fecha y hora centrada
+  push(CMD.ALIGN_CENTER)
+  push(line(`${dateStr}  ${timeStr}`))
+  push(CMD.ALIGN_LEFT)
+  push(divider('='))
+
+  // Título
+  push(CMD.ALIGN_CENTER)
+  push(CMD.BOLD_ON, CMD.DOUBLE_SIZE_ON)
+  push(line('LISTA DE PRECIOS'))
+  push(CMD.DOUBLE_SIZE_OFF, CMD.BOLD_OFF)
+  push(CMD.ALIGN_LEFT)
+  push(divider('='))
+
+  // Cabecera de columnas
+  push(CMD.BOLD_ON)
+  push(row2('MATERIAL', '$/KG'))
+  push(CMD.BOLD_OFF)
+  push(divider('-'))
+
+  // Filas
+  for (const item of items) {
+    push(row2(item.name, fmtNum(item.price)))
+  }
+
+  push(divider('='))
+
   push(CMD.FEED_4)
   push(CMD.CUT)
 

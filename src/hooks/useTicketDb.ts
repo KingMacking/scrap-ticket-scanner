@@ -36,6 +36,19 @@ interface UpdateTicketInput {
   notes?: string
 }
 
+export type TicketSortKey = 'created_at' | 'total'
+export type TicketSortDir = 'asc' | 'desc'
+
+export interface GetTicketsOptions {
+  limit?: number
+  offset?: number
+  from?: string
+  to?: string
+  material?: string
+  sortBy?: TicketSortKey
+  sortDir?: TicketSortDir
+}
+
 export function useTicketDb() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -90,14 +103,21 @@ export function useTicketDb() {
     return ticketRow.id
   }, [])
 
-  const getTickets = useCallback(async (limit = 50, offset = 0): Promise<{ tickets: Ticket[]; total: number }> => {
+  const getTickets = useCallback(async (opts: GetTicketsOptions = {}): Promise<{ tickets: Ticket[]; total: number }> => {
+    const { limit = 50, offset = 0, from, to, material, sortBy = 'created_at', sortDir = 'desc' } = opts
     setLoading(true)
     setError(null)
 
-    const { data: ticketRows, error: ticketsErr, count } = await supabase
+    let query = supabase
       .from('tickets')
       .select('*', { count: 'exact', head: false })
-      .order('created_at', { ascending: false })
+
+    if (from) query = query.gte('created_at', from)
+    if (to) query = query.lt('created_at', to)
+    if (material) query = query.contains('items', [{ material_name: material }])
+
+    const { data: ticketRows, error: ticketsErr, count } = await query
+      .order(sortBy, { ascending: sortDir === 'asc' })
       .range(offset, offset + limit - 1)
 
     if (ticketsErr) {
@@ -260,7 +280,53 @@ export function useTicketDb() {
     return (ticketRows ?? []).map(mapRowToTicket)
   }, [])
 
-  return { createTicket, getTickets, getTicket, updateTicket, deleteTicket, getMaterialSummary, getRecentTickets, loading, error }
+  const getDailyTotals = useCallback(async (from: string, to: string): Promise<{ day: string; total: number }[]> => {
+    setLoading(true)
+    setError(null)
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      setLoading(false)
+      return []
+    }
+
+    const { data: tickets, error: err } = await supabase
+      .from('tickets')
+      .select('total, created_at')
+      .gte('created_at', from)
+      .lt('created_at', to)
+      .eq('user_id', user.id)
+      .not('status', 'eq', 'cancelled')
+
+    if (err) {
+      setError(err.message)
+      setLoading(false)
+      return []
+    }
+
+    const dailyMap = new Map<string, number>()
+    for (const t of tickets ?? []) {
+      const day = (t as any).created_at.slice(0, 10)
+      dailyMap.set(day, (dailyMap.get(day) ?? 0) + (t as any).total)
+    }
+
+    const result: { day: string; total: number }[] = []
+    const current = new Date(from)
+    const end = new Date(to)
+    while (current < end) {
+      const key = current.toISOString().slice(0, 10)
+      result.push({
+        day: String(current.getDate()),
+        total: dailyMap.get(key) ?? 0,
+      })
+      current.setDate(current.getDate() + 1)
+    }
+
+    setLoading(false)
+    return result
+  }, [])
+
+  return { createTicket, getTickets, getTicket, updateTicket, deleteTicket, getMaterialSummary, getRecentTickets, getDailyTotals, loading, error }
 }
 
 let itemIdCounter = 0
