@@ -78,10 +78,11 @@ export interface PrintTicketData {
   items: PrintItem[]
   total: number
   date: Date
+  debo?: string
 }
 
 export function buildEscPos(data: PrintTicketData): string[] {
-  const { items, total, date } = data
+  const { items, total, date, debo } = data
 
   const dateStr = date.toLocaleDateString('es-AR', {
     day: '2-digit', month: '2-digit', year: 'numeric',
@@ -120,6 +121,20 @@ export function buildEscPos(data: PrintTicketData): string[] {
   push(CMD.ALIGN_RIGHT)
   push(CMD.BOLD_ON, CMD.DOUBLE_SIZE_ON)
   push(line(`TOTAL  ${fmt(total)}`))
+  push(CMD.DOUBLE_SIZE_OFF, CMD.BOLD_OFF)
+
+  // "Debo" (solo si viene completado)
+  if (debo && debo.trim()) {
+    push(CMD.ALIGN_LEFT)
+    push(CMD.BOLD_ON)
+    push(row2('DEBO', debo.trim()))
+    push(CMD.BOLD_OFF)
+  }
+
+  // Aviso final en grande
+  push(CMD.ALIGN_CENTER)
+  push(CMD.BOLD_ON, CMD.DOUBLE_SIZE_ON)
+  push(line('NO PIERDA SU BOLETA'))
   push(CMD.DOUBLE_SIZE_OFF, CMD.BOLD_OFF)
 
   // Espacio y corte

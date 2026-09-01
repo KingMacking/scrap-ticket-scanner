@@ -50,6 +50,7 @@ export function TicketEditor() {
   const [showPreview, setShowPreview] = useState(false)
   const [isPrinting, setIsPrinting] = useState(false)
   const [savedTicketId, setSavedTicketId] = useState<string | null>(null)
+  const [debo, setDebo] = useState('')
 
   const defaultMaterialIds = useMemo(
     () => Object.entries(defaultMaterialOrders)
@@ -167,7 +168,7 @@ export function TicketEditor() {
         if (ticketId) setSavedTicketId(ticketId)
       }
 
-      await qzPrint({ items: printItems, total, date: new Date() })
+      await qzPrint({ items: printItems, total, date: new Date(), debo })
 
       if (ticketId) {
         await updateTicket(ticketId, { status: 'printed' })
@@ -316,6 +317,16 @@ export function TicketEditor() {
           <span className="text-4xl font-bold tracking-tight tabular-nums">
             $ {fmt(total)}
           </span>
+        </div>
+
+        <div className="flex items-center gap-3 mt-4 px-1">
+          <label className="text-lg font-semibold text-muted-foreground shrink-0">Debo</label>
+          <Input
+            value={debo}
+            onChange={(e) => setDebo(e.target.value)}
+            placeholder="Monto (opcional)"
+            className="flex-1"
+          />
         </div>
 
         <div className="flex justify-between items-center mt-6">
