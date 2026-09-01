@@ -18,6 +18,7 @@ const CMD = {
   BOLD_OFF:       ESC + 'E\x00',
   DOUBLE_SIZE_ON: GS  + '!\x11',   // doble ancho + doble alto
   DOUBLE_SIZE_OFF:GS  + '!\x00',
+  MEDIUM_SIZE_ON: GS  + '!\x10',   // doble ancho, alto normal
   FEED_2:         ESC + 'd\x02',
   FEED_4:         ESC + 'd\x04',
   CUT:            GS  + 'V\x41\x00', // corte parcial
@@ -129,12 +130,11 @@ export function buildEscPos(data: PrintTicketData): string[] {
     push(CMD.FEED_2)
 
     push(CMD.ALIGN_RIGHT)
-    push(CMD.BOLD_ON, CMD.DOUBLE_SIZE_ON)
+    push(CMD.BOLD_ON, CMD.MEDIUM_SIZE_ON)
     push(line(`DEBO  $ ${debo.trim()}`))
     push(CMD.DOUBLE_SIZE_OFF, CMD.BOLD_OFF)
 
-    // Aviso final en grande
-    push(CMD.FEED_2)
+    // Aviso final en grande (pegado al debo)
     push(CMD.ALIGN_CENTER)
     push(CMD.BOLD_ON, CMD.DOUBLE_SIZE_ON)
     push(line('NO PIERDA SU BOLETA'))
