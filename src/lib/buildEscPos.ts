@@ -125,24 +125,29 @@ export function buildEscPos(data: PrintTicketData): string[] {
 
   // "Debo" (solo si viene completado)
   if (debo && debo.trim()) {
+    // Espacio entre total y debo
+    push(CMD.FEED_2)
+
     push(CMD.ALIGN_RIGHT)
     push(CMD.BOLD_ON, CMD.DOUBLE_SIZE_ON)
     push(line(`DEBO  $ ${debo.trim()}`))
     push(CMD.DOUBLE_SIZE_OFF, CMD.BOLD_OFF)
 
-    // Separación antes del aviso final
-    push(CMD.FEED_2)
-
     // Aviso final en grande
+    push(CMD.FEED_2)
     push(CMD.ALIGN_CENTER)
     push(CMD.BOLD_ON, CMD.DOUBLE_SIZE_ON)
     push(line('NO PIERDA SU BOLETA'))
     push(CMD.DOUBLE_SIZE_OFF, CMD.BOLD_OFF)
-  }
 
-  // Espacio y corte
-  push(CMD.FEED_4)
-  push(CMD.CUT)
+    // Corta ahí (poco espacio de más)
+    push(CMD.FEED_2)
+    push(CMD.CUT)
+  } else {
+    // Sin debo: avance estándar y corte
+    push(CMD.FEED_4)
+    push(CMD.CUT)
+  }
 
   return lines
 }

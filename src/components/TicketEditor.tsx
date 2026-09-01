@@ -175,6 +175,7 @@ export function TicketEditor() {
       }
 
       toast.success('Ticket guardado e impreso')
+      setDebo('')
 
       if (isManual) {
         reset()
