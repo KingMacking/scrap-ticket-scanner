@@ -4,14 +4,16 @@ import { Button } from '@/components/ui/button'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
-import { useTicketDb, type MaterialSummaryItem } from '@/hooks/useTicketDb'
+import { useTicketDb, type MaterialSummaryItem, type HourlyBucket } from '@/hooks/useTicketDb'
 import { usePrices } from '@/hooks/usePrices'
+import { useExpensesDb } from '@/hooks/useExpensesDb'
+import type { Expense } from '@/types/expense'
 import {
   BarChart3, Loader2, ChevronUp, ChevronDown,
   DollarSign, TrendingUp, FileText, ShoppingCart, Scale,
-  Weight,
+  Weight, Wallet,
 } from 'lucide-react'
-import { Area, AreaChart, BarChart, Bar, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Area, AreaChart, BarChart, Bar, CartesianGrid, ComposedChart, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { Ticket } from '@/types/ticket'
 import { BackButton } from '@/components/BackButton'
 
@@ -108,6 +110,144 @@ function timeAgo(dateStr: string): string {
   return `hace ${days}d`
 }
 
+function groupExpensesByHour(expenses: Expense[]): HourlyBucket[] {
+  const buckets: HourlyBucket[] = Array.from({ length: 24 }, (_, hour) => ({ hour, count: 0, total: 0 }))
+  for (const e of expenses) {
+    const d = new Date(e.expenseDate)
+    if (isNaN(d.getTime())) continue
+    buckets[d.getHours()].count += 1
+    buckets[d.getHours()].total += e.amount
+  }
+  return buckets
+}
+
+function hourRangeLabel(h: number): string {
+  return `${h}:00 – ${h + 1}:00`
+}
+
+function HourlyTicketsCard({ data }: { data: HourlyBucket[] }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base font-medium">Tickets por hora</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="h-[240px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={data} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="hourValueGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+              <XAxis
+                dataKey="hour"
+                tickLine={false}
+                axisLine={false}
+                tick={{ fontSize: 11, fill: 'var(--color-muted-foreground)' }}
+                tickFormatter={(v) => `${v}h`}
+                interval="preserveStartEnd"
+              />
+              <YAxis
+                yAxisId="count"
+                allowDecimals={false}
+                tickLine={false}
+                axisLine={false}
+                tick={{ fontSize: 11, fill: 'var(--color-muted-foreground)' }}
+                width={34}
+              />
+              <YAxis
+                yAxisId="money"
+                orientation="right"
+                tickLine={false}
+                axisLine={false}
+                tick={{ fontSize: 11, fill: 'var(--color-muted-foreground)' }}
+                tickFormatter={(v) => `$${fmt(v)}`}
+              />
+              <Tooltip
+                contentStyle={{
+                  background: 'var(--color-card)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                }}
+                labelFormatter={(h) => hourRangeLabel(Number(h))}
+                formatter={(value, name) =>
+                  name === 'Tickets'
+                    ? [String(value), 'Tickets']
+                    : [`$ ${fmt(Number(value))}`, 'Ventas']
+                }
+              />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Bar yAxisId="count" dataKey="count" name="Tickets" fill="#f59e0b" radius={[3, 3, 0, 0]} />
+              <Area yAxisId="money" type="monotone" dataKey="total" name="Ventas" stroke="#3b82f6" fill="url(#hourValueGrad)" strokeWidth={2} dot={false} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+        <p className="text-xs text-muted-foreground mt-1">Cantidad de tickets (barras) y facturación (área) por hora</p>
+      </CardContent>
+    </Card>
+  )
+}
+
+function HourlyExpensesCard({ data }: { data: HourlyBucket[] }) {
+  const total = data.reduce((s, h) => s + h.total, 0)
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base font-medium">Gastos por hora</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {total === 0 ? (
+          <div className="h-[240px] flex flex-col items-center justify-center gap-2 text-muted-foreground">
+            <Wallet className="size-6 opacity-30" />
+            <p className="text-sm">Sin gastos registrados este día</p>
+          </div>
+        ) : (
+          <>
+            <div className="h-[240px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={data} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                  <XAxis
+                    dataKey="hour"
+                    tickLine={false}
+                    axisLine={false}
+                    tick={{ fontSize: 11, fill: 'var(--color-muted-foreground)' }}
+                    tickFormatter={(v) => `${v}h`}
+                    interval="preserveStartEnd"
+                  />
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    tick={{ fontSize: 11, fill: 'var(--color-muted-foreground)' }}
+                    tickFormatter={(v) => `$${fmt(v)}`}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      background: 'var(--color-card)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: '8px',
+                      fontSize: '13px',
+                    }}
+                    labelFormatter={(h) => hourRangeLabel(Number(h))}
+                    formatter={(value) => [`$ ${fmt(Number(value))}`, 'Gasto']}
+                  />
+                  <Bar dataKey="total" fill="#f43f5e" radius={[3, 3, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Cada barra muestra el gasto de esa franja (ej: 15:00 – 16:00)</p>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 function StatCard({
   title, value, icon: Icon, color,
 }: {
@@ -173,25 +313,39 @@ export function Dashboard() {
   const [totalTickets, setTotalTickets] = useState(0)
   const [recentTickets, setRecentTickets] = useState<Ticket[]>([])
   const [dailyTotals, setDailyTotals] = useState<{ day: string; total: number }[]>([])
-  const { getMaterialSummary, getRecentTickets, getDailyTotals, loading, error: dbError } = useTicketDb()
+  const [hourlyTickets, setHourlyTickets] = useState<HourlyBucket[]>([])
+  const [hourlyExpenses, setHourlyExpenses] = useState<HourlyBucket[]>([])
+  const { getMaterialSummary, getRecentTickets, getDailyTotals, getHourlyTotals, loading, error: dbError } = useTicketDb()
+  const { getExpenses } = useExpensesDb()
   const { prices } = usePrices()
   const [sortKey, setSortKey] = useState<SortKey>('totalValue')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
 
   const from = fromDate.toISOString()
   const to = toDate.toISOString()
+  const isSingleDay = fromDate.toDateString() === toDate.toDateString()
 
   const load = useCallback(async () => {
-    const [summaryResult, recent, daily] = await Promise.all([
+    const [summaryResult, recent] = await Promise.all([
       getMaterialSummary(from, to, prices),
       getRecentTickets(10),
-      getDailyTotals(from, to),
     ])
     setSummary(summaryResult.items)
     setTotalTickets(summaryResult.totalTickets)
     setRecentTickets(recent)
-    setDailyTotals(daily)
-  }, [from, to, prices, getMaterialSummary, getRecentTickets, getDailyTotals])
+
+    if (isSingleDay) {
+      const [hourly, exps] = await Promise.all([
+        getHourlyTotals(from, to),
+        getExpenses({ from, to, limit: 1000 }),
+      ])
+      setHourlyTickets(hourly)
+      setHourlyExpenses(groupExpensesByHour(exps))
+    } else {
+      const daily = await getDailyTotals(from, to)
+      setDailyTotals(daily)
+    }
+  }, [from, to, isSingleDay, prices, getMaterialSummary, getRecentTickets, getDailyTotals, getHourlyTotals, getExpenses])
 
   useEffect(() => {
     load()
@@ -337,40 +491,47 @@ export function Dashboard() {
 
           {/* Charts */}
           <div className="grid gap-6 lg:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base font-medium">Evolución diaria</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[200px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={dailyTotals}>
-                      <defs>
-                        <linearGradient id="valueGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-                      <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: 'var(--color-muted-foreground)' }} />
-                      <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: 'var(--color-muted-foreground)' }} tickFormatter={(v) => `$${fmt(v)}`} />
-                      <Tooltip
-                        contentStyle={{
-                          background: 'var(--color-card)',
-                          border: '1px solid var(--color-border)',
-                          borderRadius: '8px',
-                          fontSize: '13px',
-                        }}
-                        formatter={(value) => [`$ ${fmt(Number(value))}`, 'Total']}
-                      />
-                      <Area type="monotone" dataKey="total" stroke="#3b82f6" fill="url(#valueGrad)" strokeWidth={2} dot={false} />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
+            {isSingleDay ? (
+              <>
+                <HourlyTicketsCard data={hourlyTickets} />
+                <HourlyExpensesCard data={hourlyExpenses} />
+              </>
+            ) : (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base font-medium">Evolución diaria</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-[200px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={dailyTotals}>
+                        <defs>
+                          <linearGradient id="valueGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                        <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: 'var(--color-muted-foreground)' }} />
+                        <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: 'var(--color-muted-foreground)' }} tickFormatter={(v) => `$${fmt(v)}`} />
+                        <Tooltip
+                          contentStyle={{
+                            background: 'var(--color-card)',
+                            border: '1px solid var(--color-border)',
+                            borderRadius: '8px',
+                            fontSize: '13px',
+                          }}
+                          formatter={(value) => [`$ ${fmt(Number(value))}`, 'Total']}
+                        />
+                        <Area type="monotone" dataKey="total" stroke="#3b82f6" fill="url(#valueGrad)" strokeWidth={2} dot={false} />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
-            <Card>
+            <Card className={isSingleDay ? 'lg:col-span-2' : ''}>
               <CardHeader>
                 <CardTitle className="text-base font-medium">Materiales</CardTitle>
               </CardHeader>

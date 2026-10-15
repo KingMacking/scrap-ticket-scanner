@@ -21,6 +21,39 @@ function todayDate(): string {
   return `${d.getFullYear()}-${m}-${day}`
 }
 
+function pad2(n: number): string {
+  return String(n).padStart(2, '0')
+}
+
+function localDateStr(d: Date): string {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+}
+
+/**
+ * Genera el timestamp del gasto conservando la hora del día:
+ * - Si se edita, mantiene la hora original del gasto.
+ * - Si es hoy, usa la hora actual.
+ * - Si es otra fecha, usa mediodía.
+ */
+function buildExpenseDate(dateStr: string, preserveIso?: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  let hh = 12, mm = 0, ss = 0
+
+  if (preserveIso) {
+    const prev = new Date(preserveIso)
+    if (!isNaN(prev.getTime())) {
+      hh = prev.getHours(); mm = prev.getMinutes(); ss = prev.getSeconds()
+    }
+  } else {
+    const now = new Date()
+    if (dateStr === localDateStr(now)) {
+      hh = now.getHours(); mm = now.getMinutes(); ss = now.getSeconds()
+    }
+  }
+
+  return new Date(y, (m || 1) - 1, d || 1, hh, mm, ss).toISOString()
+}
+
 function formatDate(iso: string): string {
   const d = new Date(iso)
   if (isNaN(d.getTime())) return iso
@@ -74,8 +107,8 @@ export function Expenses() {
     const cat = filterCategory === 'all' ? undefined : filterCategory
     const result = await getExpenses({
       type: tab,
-      from: from || undefined,
-      to: to ? to + 'T23:59:59.999' : undefined,
+      from: from ? new Date(from + 'T00:00:00').toISOString() : undefined,
+      to: to ? new Date(to + 'T23:59:59.999').toISOString() : undefined,
       category: cat,
     })
     setExpenses(result)
@@ -96,12 +129,13 @@ export function Expenses() {
     if (isNaN(amount) || amount <= 0) { toast.error('Ingresá un monto válido'); return }
     if (!form.date) { toast.error('Ingresá una fecha'); return }
 
+    const editingExpense = editingId ? expenses.find((e) => e.id === editingId) : undefined
     const input = {
       type: tab as ExpenseType,
       category: name,
       amount,
       observations: form.observations,
-      expenseDate: form.date + 'T12:00:00.000',
+      expenseDate: buildExpenseDate(form.date, editingExpense?.expenseDate),
     }
 
     let ok: boolean
@@ -123,12 +157,13 @@ export function Expenses() {
 
   const startEdit = (e: Expense) => {
     const id = list.find((x) => x.name === e.category)?.id
+    const d = new Date(e.expenseDate)
     setEditingId(e.id)
     setForm({
       categoryId: id ?? '',
       amount: String(e.amount),
       observations: e.observations,
-      date: e.expenseDate.slice(0, 10),
+      date: isNaN(d.getTime()) ? e.expenseDate.slice(0, 10) : localDateStr(d),
     })
     setShowManage(false)
     window.scrollTo({ top: 0, behavior: 'smooth' })

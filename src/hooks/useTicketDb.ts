@@ -16,6 +16,12 @@ export interface MaterialSummaryResult {
   totalTickets: number
 }
 
+export interface HourlyBucket {
+  hour: number
+  count: number
+  total: number
+}
+
 interface CreateItemInput {
   materialName: string
   weight: number
@@ -326,7 +332,44 @@ export function useTicketDb() {
     return result
   }, [])
 
-  return { createTicket, getTickets, getTicket, updateTicket, deleteTicket, getMaterialSummary, getRecentTickets, getDailyTotals, loading, error }
+  const getHourlyTotals = useCallback(async (from: string, to: string): Promise<HourlyBucket[]> => {
+    setLoading(true)
+    setError(null)
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      setLoading(false)
+      return []
+    }
+
+    const { data: tickets, error: err } = await supabase
+      .from('tickets')
+      .select('total, created_at')
+      .gte('created_at', from)
+      .lt('created_at', to)
+      .eq('user_id', user.id)
+      .not('status', 'eq', 'cancelled')
+
+    if (err) {
+      setError(err.message)
+      setLoading(false)
+      return []
+    }
+
+    const buckets: HourlyBucket[] = Array.from({ length: 24 }, (_, hour) => ({ hour, count: 0, total: 0 }))
+    for (const t of tickets ?? []) {
+      const d = new Date(t.created_at)
+      if (isNaN(d.getTime())) continue
+      const h = d.getHours()
+      buckets[h].count += 1
+      buckets[h].total += Number(t.total)
+    }
+
+    setLoading(false)
+    return buckets
+  }, [])
+
+  return { createTicket, getTickets, getTicket, updateTicket, deleteTicket, getMaterialSummary, getRecentTickets, getDailyTotals, getHourlyTotals, loading, error }
 }
 
 let itemIdCounter = 0
