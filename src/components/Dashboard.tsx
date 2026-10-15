@@ -4,14 +4,12 @@ import { Button } from '@/components/ui/button'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
-import { useTicketDb, type MaterialSummaryItem, type HourlyBucket } from '@/hooks/useTicketDb'
+import { useTicketDb, type MaterialSummaryItem, type HourlyBucket, type MaterialHourBucket, type MaterialHourlySeries } from '@/hooks/useTicketDb'
 import { usePrices } from '@/hooks/usePrices'
-import { useExpensesDb } from '@/hooks/useExpensesDb'
-import type { Expense } from '@/types/expense'
 import {
   BarChart3, Loader2, ChevronUp, ChevronDown,
   DollarSign, TrendingUp, FileText, ShoppingCart, Scale,
-  Weight, Wallet,
+  Weight,
 } from 'lucide-react'
 import { Area, AreaChart, BarChart, Bar, CartesianGrid, ComposedChart, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { Ticket } from '@/types/ticket'
@@ -110,19 +108,12 @@ function timeAgo(dateStr: string): string {
   return `hace ${days}d`
 }
 
-function groupExpensesByHour(expenses: Expense[]): HourlyBucket[] {
-  const buckets: HourlyBucket[] = Array.from({ length: 24 }, (_, hour) => ({ hour, count: 0, total: 0 }))
-  for (const e of expenses) {
-    const d = new Date(e.expenseDate)
-    if (isNaN(d.getTime())) continue
-    buckets[d.getHours()].count += 1
-    buckets[d.getHours()].total += e.amount
-  }
-  return buckets
-}
-
 function hourRangeLabel(h: number): string {
   return `${h}:00 – ${h + 1}:00`
+}
+
+function emptyMaterialBuckets(): MaterialHourBucket[] {
+  return Array.from({ length: 24 }, (_, hour) => ({ hour, weight: 0, value: 0 }))
 }
 
 function HourlyTicketsCard({ data }: { data: HourlyBucket[] }) {
@@ -192,57 +183,87 @@ function HourlyTicketsCard({ data }: { data: HourlyBucket[] }) {
   )
 }
 
-function HourlyExpensesCard({ data }: { data: HourlyBucket[] }) {
-  const total = data.reduce((s, h) => s + h.total, 0)
-
+function HourlyMaterialsCard({
+  data, materials, selected, onSelect,
+}: {
+  data: MaterialHourBucket[]
+  materials: string[]
+  selected: string
+  onSelect: (value: string) => void
+}) {
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-base font-medium">Gastos por hora</CardTitle>
+      <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+        <CardTitle className="text-base font-medium">Materiales por hora</CardTitle>
+        <select
+          value={selected}
+          onChange={(e) => onSelect(e.target.value)}
+          className="text-sm border rounded-md px-2 py-1.5 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring max-w-[50%]"
+        >
+          <option value="">Todos</option>
+          {materials.map((m) => (
+            <option key={m} value={m}>{m}</option>
+          ))}
+        </select>
       </CardHeader>
       <CardContent>
-        {total === 0 ? (
-          <div className="h-[240px] flex flex-col items-center justify-center gap-2 text-muted-foreground">
-            <Wallet className="size-6 opacity-30" />
-            <p className="text-sm">Sin gastos registrados este día</p>
-          </div>
-        ) : (
-          <>
-            <div className="h-[240px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-                  <XAxis
-                    dataKey="hour"
-                    tickLine={false}
-                    axisLine={false}
-                    tick={{ fontSize: 11, fill: 'var(--color-muted-foreground)' }}
-                    tickFormatter={(v) => `${v}h`}
-                    interval="preserveStartEnd"
-                  />
-                  <YAxis
-                    tickLine={false}
-                    axisLine={false}
-                    tick={{ fontSize: 11, fill: 'var(--color-muted-foreground)' }}
-                    tickFormatter={(v) => `$${fmt(v)}`}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      background: 'var(--color-card)',
-                      border: '1px solid var(--color-border)',
-                      borderRadius: '8px',
-                      fontSize: '13px',
-                    }}
-                    labelFormatter={(h) => hourRangeLabel(Number(h))}
-                    formatter={(value) => [`$ ${fmt(Number(value))}`, 'Gasto']}
-                  />
-                  <Bar dataKey="total" fill="#f43f5e" radius={[3, 3, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">Cada barra muestra el gasto de esa franja (ej: 15:00 – 16:00)</p>
-          </>
-        )}
+        <div className="h-[240px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={data} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="materialValueGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+              <XAxis
+                dataKey="hour"
+                tickLine={false}
+                axisLine={false}
+                tick={{ fontSize: 11, fill: 'var(--color-muted-foreground)' }}
+                tickFormatter={(v) => `${v}h`}
+                interval="preserveStartEnd"
+              />
+              <YAxis
+                yAxisId="weight"
+                tickLine={false}
+                axisLine={false}
+                tick={{ fontSize: 11, fill: 'var(--color-muted-foreground)' }}
+                tickFormatter={(v) => `${fmt(v)}`}
+                width={40}
+              />
+              <YAxis
+                yAxisId="value"
+                orientation="right"
+                tickLine={false}
+                axisLine={false}
+                tick={{ fontSize: 11, fill: 'var(--color-muted-foreground)' }}
+                tickFormatter={(v) => `$${fmt(v)}`}
+              />
+              <Tooltip
+                contentStyle={{
+                  background: 'var(--color-card)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                }}
+                labelFormatter={(h) => hourRangeLabel(Number(h))}
+                formatter={(value, name) =>
+                  name === 'Peso'
+                    ? [`${fmtWeight(Number(value))} kg`, 'Peso']
+                    : [`$ ${fmt(Number(value))}`, 'Valor']
+                }
+              />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Bar yAxisId="weight" dataKey="weight" name="Peso" fill="#10b981" radius={[3, 3, 0, 0]} />
+              <Area yAxisId="value" type="monotone" dataKey="value" name="Valor" stroke="#6366f1" fill="url(#materialValueGrad)" strokeWidth={2} dot={false} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+        <p className="text-xs text-muted-foreground mt-1">
+          {selected ? `${selected}: ` : 'Todos los materiales: '}peso en kg (barras) y valor en $ (área) por hora
+        </p>
       </CardContent>
     </Card>
   )
@@ -314,9 +335,9 @@ export function Dashboard() {
   const [recentTickets, setRecentTickets] = useState<Ticket[]>([])
   const [dailyTotals, setDailyTotals] = useState<{ day: string; total: number }[]>([])
   const [hourlyTickets, setHourlyTickets] = useState<HourlyBucket[]>([])
-  const [hourlyExpenses, setHourlyExpenses] = useState<HourlyBucket[]>([])
-  const { getMaterialSummary, getRecentTickets, getDailyTotals, getHourlyTotals, loading, error: dbError } = useTicketDb()
-  const { getExpenses } = useExpensesDb()
+  const [hourlyMaterials, setHourlyMaterials] = useState<MaterialHourlySeries[]>([])
+  const [selectedMaterial, setSelectedMaterial] = useState('')
+  const { getMaterialSummary, getRecentTickets, getDailyTotals, getHourlyTotals, getHourlyMaterialTotals, loading, error: dbError } = useTicketDb()
   const { prices } = usePrices()
   const [sortKey, setSortKey] = useState<SortKey>('totalValue')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
@@ -335,23 +356,41 @@ export function Dashboard() {
     setRecentTickets(recent)
 
     if (isSingleDay) {
-      const [hourly, exps] = await Promise.all([
+      const [hourly, mats] = await Promise.all([
         getHourlyTotals(from, to),
-        getExpenses({ from, to, limit: 1000 }),
+        getHourlyMaterialTotals(from, to),
       ])
       setHourlyTickets(hourly)
-      setHourlyExpenses(groupExpensesByHour(exps))
+      setHourlyMaterials(mats)
     } else {
       const daily = await getDailyTotals(from, to)
       setDailyTotals(daily)
     }
-  }, [from, to, isSingleDay, prices, getMaterialSummary, getRecentTickets, getDailyTotals, getHourlyTotals, getExpenses])
+  }, [from, to, isSingleDay, prices, getMaterialSummary, getRecentTickets, getDailyTotals, getHourlyTotals, getHourlyMaterialTotals])
 
   useEffect(() => {
     load()
   }, [load])
 
   const sorted = useMemo(() => sortItems(summary, sortKey, sortDir), [summary, sortKey, sortDir])
+
+  const materialNames = useMemo(() => hourlyMaterials.map((s) => s.materialName), [hourlyMaterials])
+  const effectiveMaterial = materialNames.includes(selectedMaterial) ? selectedMaterial : ''
+
+  const materialChartData = useMemo(() => {
+    const buckets = emptyMaterialBuckets()
+    if (!effectiveMaterial) {
+      for (const s of hourlyMaterials) {
+        for (let h = 0; h < 24; h++) {
+          buckets[h].weight += s.buckets[h].weight
+          buckets[h].value += s.buckets[h].value
+        }
+      }
+      return buckets
+    }
+    const found = hourlyMaterials.find((s) => s.materialName === effectiveMaterial)
+    return found ? found.buckets : buckets
+  }, [hourlyMaterials, effectiveMaterial])
 
   const handleSort = (key: SortKey) => {
     if (key === sortKey) {
@@ -494,7 +533,12 @@ export function Dashboard() {
             {isSingleDay ? (
               <>
                 <HourlyTicketsCard data={hourlyTickets} />
-                <HourlyExpensesCard data={hourlyExpenses} />
+                <HourlyMaterialsCard
+                  data={materialChartData}
+                  materials={materialNames}
+                  selected={effectiveMaterial}
+                  onSelect={setSelectedMaterial}
+                />
               </>
             ) : (
               <Card>

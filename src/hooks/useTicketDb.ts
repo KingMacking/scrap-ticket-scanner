@@ -22,6 +22,17 @@ export interface HourlyBucket {
   total: number
 }
 
+export interface MaterialHourBucket {
+  hour: number
+  weight: number
+  value: number
+}
+
+export interface MaterialHourlySeries {
+  materialName: string
+  buckets: MaterialHourBucket[]
+}
+
 interface CreateItemInput {
   materialName: string
   weight: number
@@ -369,7 +380,54 @@ export function useTicketDb() {
     return buckets
   }, [])
 
-  return { createTicket, getTickets, getTicket, updateTicket, deleteTicket, getMaterialSummary, getRecentTickets, getDailyTotals, getHourlyTotals, loading, error }
+  const getHourlyMaterialTotals = useCallback(async (from: string, to: string): Promise<MaterialHourlySeries[]> => {
+    setLoading(true)
+    setError(null)
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      setLoading(false)
+      return []
+    }
+
+    const { data: tickets, error: err } = await supabase
+      .from('tickets')
+      .select('items, created_at')
+      .gte('created_at', from)
+      .lt('created_at', to)
+      .eq('user_id', user.id)
+      .not('status', 'eq', 'cancelled')
+
+    if (err) {
+      setError(err.message)
+      setLoading(false)
+      return []
+    }
+
+    const map = new Map<string, MaterialHourBucket[]>()
+    for (const t of tickets ?? []) {
+      const d = new Date(t.created_at)
+      if (isNaN(d.getTime())) continue
+      const hour = d.getHours()
+      const items = (t.items ?? []) as TicketItemJson[]
+      for (const item of items) {
+        let buckets = map.get(item.material_name)
+        if (!buckets) {
+          buckets = Array.from({ length: 24 }, (_, h) => ({ hour: h, weight: 0, value: 0 }))
+          map.set(item.material_name, buckets)
+        }
+        buckets[hour].weight += item.weight
+        buckets[hour].value += item.subtotal
+      }
+    }
+
+    setLoading(false)
+    return [...map.entries()]
+      .map(([materialName, buckets]) => ({ materialName, buckets }))
+      .sort((a, b) => a.materialName.localeCompare(b.materialName))
+  }, [])
+
+  return { createTicket, getTickets, getTicket, updateTicket, deleteTicket, getMaterialSummary, getRecentTickets, getDailyTotals, getHourlyTotals, getHourlyMaterialTotals, loading, error }
 }
 
 let itemIdCounter = 0
