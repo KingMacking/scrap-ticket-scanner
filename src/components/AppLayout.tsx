@@ -2,6 +2,7 @@ import { useNavigate, Outlet, useLocation } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/hooks/useAuth'
 import { BarChart3, History, Settings, LogOut, Home, Wallet } from 'lucide-react'
+import { PanicButton } from '@/components/PanicButton'
 
 export function AppLayout() {
   const navigate = useNavigate()
@@ -39,6 +40,7 @@ export function AppLayout() {
         </div>
       )}
       <Outlet />
+      <PanicButton />
     </main>
   )
 }
