@@ -82,6 +82,8 @@ export function TicketHistory() {
   const [toDate, setToDate] = useState<Date | null>(todayEnd())
   const [material, setMaterial] = useState('all')
   const [sortIdx, setSortIdx] = useState(0)
+  const [sellerInput, setSellerInput] = useState('')
+  const [seller, setSeller] = useState('')
 
   const preset = (mode: 'today' | 'week' | 'month' | 'all') => {
     if (mode === 'all') {
@@ -113,17 +115,24 @@ export function TicketHistory() {
       from,
       to,
       material: material === 'all' ? undefined : material,
+      seller: seller || undefined,
       sortBy: sortOptions[sortIdx].key,
       sortDir: sortOptions[sortIdx].dir,
     })
     setTickets(result.tickets)
     setTotal(result.total)
     setOffset(PAGE_SIZE)
-  }, [getTickets, fromDate, toDate, material, sortIdx])
+  }, [getTickets, fromDate, toDate, material, seller, sortIdx])
 
   useEffect(() => {
     load()
   }, [load])
+
+  // Debounce de la búsqueda por vendedor
+  useEffect(() => {
+    const id = window.setTimeout(() => setSeller(sellerInput.trim()), 350)
+    return () => window.clearTimeout(id)
+  }, [sellerInput])
 
   const loadMore = async () => {
     setLoadingMore(true)
@@ -135,6 +144,7 @@ export function TicketHistory() {
       from,
       to,
       material: material === 'all' ? undefined : material,
+      seller: seller || undefined,
       sortBy: sortOptions[sortIdx].key,
       sortDir: sortOptions[sortIdx].dir,
     })
@@ -185,9 +195,11 @@ export function TicketHistory() {
     setToDate(null)
     setMaterial('all')
     setSortIdx(0)
+    setSellerInput('')
+    setSeller('')
   }
 
-  const hasActiveFilters = fromDate !== null || toDate !== null || material !== 'all' || sortIdx !== 0
+  const hasActiveFilters = fromDate !== null || toDate !== null || material !== 'all' || sortIdx !== 0 || seller !== ''
 
   const inputCls =
     'text-sm border rounded-md px-2 py-1.5 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring'
@@ -268,6 +280,16 @@ export function TicketHistory() {
                     if (!isNaN(d.getTime())) setToDate(d)
                   }}
                   className={inputCls}
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-muted-foreground">Vendedor</label>
+                <input
+                  type="text"
+                  value={sellerInput}
+                  onChange={(e) => setSellerInput(e.target.value)}
+                  placeholder="DNI o nombre"
+                  className={`${inputCls} w-40`}
                 />
               </div>
             </div>
@@ -353,6 +375,12 @@ export function TicketHistory() {
                     <div className="text-xs text-muted-foreground space-y-0.5">
                       <span>{t.items.length} material{t.items.length !== 1 ? 'es' : ''}</span>
                       {t.client && <div className="block">Cliente: {t.client}</div>}
+                      {(t.sellerName || t.sellerDni) && (
+                        <div className="block">
+                          Vendedor: {t.sellerName || '—'}
+                          {t.sellerDni ? ` (DNI ${t.sellerDni})` : ''}
+                        </div>
+                      )}
                       {t.notes && <div className="block italic">{t.notes}</div>}
                       <div className="block">
                         {t.items.map((item) => (

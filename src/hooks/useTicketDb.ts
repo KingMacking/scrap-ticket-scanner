@@ -44,6 +44,9 @@ interface CreateTicketInput {
   total: number
   client?: string
   notes?: string
+  sellerDni?: string
+  sellerName?: string
+  sellerAddress?: string
 }
 
 interface UpdateTicketInput {
@@ -51,6 +54,9 @@ interface UpdateTicketInput {
   status?: TicketStatus
   total?: number
   notes?: string
+  sellerDni?: string
+  sellerName?: string
+  sellerAddress?: string
 }
 
 export type TicketSortKey = 'created_at' | 'total'
@@ -62,6 +68,8 @@ export interface GetTicketsOptions {
   from?: string
   to?: string
   material?: string
+  /** Busca por DNI o nombre del vendedor */
+  seller?: string
   sortBy?: TicketSortKey
   sortDir?: TicketSortDir
 }
@@ -106,6 +114,10 @@ export function useTicketDb() {
         total,
         notes: input.notes ?? '',
         items: itemsJson,
+        seller_dni: input.sellerDni?.trim() ?? '',
+        seller_name: input.sellerName?.trim() ?? '',
+        seller_address: input.sellerAddress?.trim() ?? '',
+        seller_captured_at: input.sellerDni?.trim() ? new Date().toISOString() : null,
       })
       .select()
       .single()
@@ -121,7 +133,7 @@ export function useTicketDb() {
   }, [])
 
   const getTickets = useCallback(async (opts: GetTicketsOptions = {}): Promise<{ tickets: Ticket[]; total: number }> => {
-    const { limit = 50, offset = 0, from, to, material, sortBy = 'created_at', sortDir = 'desc' } = opts
+    const { limit = 50, offset = 0, from, to, material, seller, sortBy = 'created_at', sortDir = 'desc' } = opts
     setLoading(true)
     setError(null)
 
@@ -132,6 +144,11 @@ export function useTicketDb() {
     if (from) query = query.gte('created_at', from)
     if (to) query = query.lt('created_at', to)
     if (material) query = query.contains('items', [{ material_name: material }])
+    if (seller) {
+      // Sanitizar para no romper la sintaxis de .or() de PostgREST
+      const q = seller.replace(/[,()%*\\]/g, '').trim()
+      if (q) query = query.or(`seller_dni.ilike.%${q}%,seller_name.ilike.%${q}%`)
+    }
 
     const { data: ticketRows, error: ticketsErr, count } = await query
       .order(sortBy, { ascending: sortDir === 'asc' })
@@ -174,9 +191,18 @@ export function useTicketDb() {
     setLoading(true)
     setError(null)
 
+    const { sellerDni, sellerName, sellerAddress, ...rest } = input
+    const payload: Record<string, unknown> = { ...rest }
+    if (sellerDni !== undefined) {
+      payload.seller_dni = sellerDni
+      payload.seller_captured_at = sellerDni.trim() ? new Date().toISOString() : null
+    }
+    if (sellerName !== undefined) payload.seller_name = sellerName
+    if (sellerAddress !== undefined) payload.seller_address = sellerAddress
+
     const { data: ticketRow, error: ticketErr } = await supabase
       .from('tickets')
-      .update(input)
+      .update(payload)
       .eq('id', id)
       .select()
       .single()
@@ -449,6 +475,9 @@ function mapRowToTicket(t: TicketRow): Ticket {
     status: t.status,
     total: t.total,
     notes: t.notes,
+    sellerDni: t.seller_dni ?? '',
+    sellerName: t.seller_name ?? '',
+    sellerAddress: t.seller_address ?? '',
     items,
   }
 }

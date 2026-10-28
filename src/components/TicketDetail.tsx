@@ -136,6 +136,29 @@ export function TicketDetail() {
               <span className="font-medium italic">{ticket.notes}</span>
             </div>
           )}
+          {(ticket.sellerDni || ticket.sellerName || ticket.sellerAddress) && (
+            <div className="space-y-1 pt-1">
+              <p className="text-xs text-muted-foreground uppercase tracking-wider">Vendedor</p>
+              {ticket.sellerName && (
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground shrink-0">Nombre</span>
+                  <span className="font-medium text-right">{ticket.sellerName}</span>
+                </div>
+              )}
+              {ticket.sellerDni && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">DNI</span>
+                  <span className="font-medium tabular-nums">{ticket.sellerDni}</span>
+                </div>
+              )}
+              {ticket.sellerAddress && (
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground shrink-0">Domicilio</span>
+                  <span className="font-medium text-right">{ticket.sellerAddress}</span>
+                </div>
+              )}
+            </div>
+          )}
           <div className="flex justify-between border-t pt-1 mt-1">
             <span className="text-muted-foreground">Total</span>
             <span className="text-2xl font-bold tabular-nums">$ {fmt(ticket.total)}</span>

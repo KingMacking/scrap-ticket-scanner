@@ -24,6 +24,9 @@ export interface Ticket {
   status: TicketStatus
   total: number
   notes: string
+  sellerDni: string
+  sellerName: string
+  sellerAddress: string
 }
 
 export interface TicketRow {
@@ -34,6 +37,10 @@ export interface TicketRow {
   total: number
   notes: string
   items: TicketItemJson[]
+  seller_dni: string | null
+  seller_name: string | null
+  seller_address: string | null
+  seller_captured_at: string | null
   created_at: string
   updated_at: string
 }

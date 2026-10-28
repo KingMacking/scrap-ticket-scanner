@@ -10,10 +10,11 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Printer, RotateCcw, CheckCircle2, ChevronDown, ChevronUp,
-  Wifi, WifiOff, Loader2, Trash2, Plus, ClipboardList,
+  Wifi, WifiOff, Loader2, Trash2, Plus, ClipboardList, ScanLine,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { TicketPreview } from '@/components/TicketPreview'
+import { DniScanner } from '@/components/DniScanner'
 import { usePrices } from '@/hooks/usePrices'
 import { useTicketDb } from '@/hooks/useTicketDb'
 import { useQzTray } from '@/hooks/useQzTray'
@@ -51,6 +52,10 @@ export function TicketEditor() {
   const [isPrinting, setIsPrinting] = useState(false)
   const [savedTicketId, setSavedTicketId] = useState<string | null>(null)
   const [debo, setDebo] = useState('')
+  const [sellerDni, setSellerDni] = useState('')
+  const [sellerName, setSellerName] = useState('')
+  const [sellerAddress, setSellerAddress] = useState('')
+  const [scannerOpen, setScannerOpen] = useState(false)
 
   const defaultMaterialIds = useMemo(
     () => Object.entries(defaultMaterialOrders)
@@ -164,6 +169,9 @@ export function TicketEditor() {
             price: i.price ?? 0,
           })),
           total,
+          sellerDni,
+          sellerName,
+          sellerAddress,
         })
         if (ticketId) setSavedTicketId(ticketId)
       }
@@ -330,6 +338,38 @@ export function TicketEditor() {
           />
         </div>
 
+        <div className="mt-5 px-1 pt-4 border-t">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <span className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+              Vendedor (opcional)
+            </span>
+            <Button type="button" variant="outline" size="sm" onClick={() => setScannerOpen(true)}>
+              <ScanLine className="size-3.5 mr-1.5" />
+              Escanear dorso
+            </Button>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Input
+              value={sellerDni}
+              onChange={(e) => setSellerDni(e.target.value.replace(/\D/g, ''))}
+              placeholder="DNI"
+              inputMode="numeric"
+            />
+            <Input
+              value={sellerName}
+              onChange={(e) => setSellerName(e.target.value)}
+              placeholder="Apellido y nombre"
+            />
+          </div>
+          <textarea
+            value={sellerAddress}
+            onChange={(e) => setSellerAddress(e.target.value)}
+            rows={2}
+            placeholder="Domicilio (tal cual figura en el DNI)"
+            className="mt-2 w-full text-sm border rounded-md px-2 py-1.5 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+          />
+        </div>
+
         <div className="flex justify-between items-center mt-6">
           <div className="flex items-center gap-2">
             {savedTicketId && (
@@ -366,6 +406,19 @@ export function TicketEditor() {
           </Button>
         </div>
       </form>
+
+      {scannerOpen && (
+        <DniScanner
+          onClose={() => setScannerOpen(false)}
+          onUse={(data) => {
+            setSellerDni(data.dni)
+            setSellerName(data.name)
+            setSellerAddress(data.address)
+            setScannerOpen(false)
+            toast.success('Datos del DNI cargados')
+          }}
+        />
+      )}
 
       {import.meta.env.DEV && (
         <div className="print:hidden">
