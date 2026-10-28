@@ -10,11 +10,12 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Printer, RotateCcw, CheckCircle2, ChevronDown, ChevronUp,
-  Wifi, WifiOff, Loader2, Trash2, Plus, ClipboardList, ScanLine,
+  Wifi, WifiOff, Loader2, Trash2, Plus, ClipboardList, ScanLine, FileText,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { TicketPreview } from '@/components/TicketPreview'
 import { DniScanner } from '@/components/DniScanner'
+import { printDeclaration, isDeclarationMaterial } from '@/lib/buildDeclarationHtml'
 import { usePrices } from '@/hooks/usePrices'
 import { useTicketDb } from '@/hooks/useTicketDb'
 import { useQzTray } from '@/hooks/useQzTray'
@@ -122,6 +123,22 @@ export function TicketEditor() {
       weight: '',
       price: prices[mat.name]?.purchase?.toString() ?? '',
     })
+  }
+
+  const handleDeclaration = () => {
+    const items = previewItems
+      .filter((i) => i.weight > 0 && isDeclarationMaterial(i.materialName))
+      .map((i) => ({ materialName: i.materialName, weight: i.weight }))
+
+    const ok = printDeclaration({
+      sellerName,
+      sellerDni,
+      sellerAddress,
+      items,
+      date: new Date(),
+    })
+
+    if (!ok) toast.error('No se pudo abrir la impresión (revisá el bloqueador de ventanas)')
   }
 
   const buildTicketItems = (data: FormInput): TicketItem[] =>
@@ -398,12 +415,24 @@ export function TicketEditor() {
             </div>
           </div>
 
-          <Button type="submit" size="lg" disabled={isPrinting}>
-            {isPrinting
-              ? <><Loader2 className="size-4 mr-2 animate-spin" />Imprimiendo...</>
-              : <><Printer className="size-4 mr-2" />Imprimir y guardar</>
-            }
-          </Button>
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              size="lg"
+              onClick={handleDeclaration}
+              title="Abre el diálogo de impresión para elegir otra impresora (A4)"
+            >
+              <FileText className="size-4 mr-2" />
+              Declaración jurada
+            </Button>
+            <Button type="submit" size="lg" disabled={isPrinting}>
+              {isPrinting
+                ? <><Loader2 className="size-4 mr-2 animate-spin" />Imprimiendo...</>
+                : <><Printer className="size-4 mr-2" />Imprimir y guardar</>
+              }
+            </Button>
+          </div>
         </div>
       </form>
 
