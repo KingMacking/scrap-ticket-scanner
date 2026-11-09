@@ -19,17 +19,27 @@ export function isDeclarationMaterial(name: string): boolean {
 
 /** "SAN MARTÍN 2538, CAÑUELAS - CAÑUELAS - BUENOS AIRES" -> calle / número / localidad */
 export function splitAddress(address: string): { street: string; number: string; city: string } {
-  const trimmed = address.trim()
+  const trimmed = address.trim().replace(/\s+/g, ' ')
   if (!trimmed) return { street: '', number: '', city: '' }
 
-  const commaIndex = trimmed.indexOf(',')
-  const streetPart = (commaIndex === -1 ? trimmed : trimmed.slice(0, commaIndex)).trim()
-  const city = commaIndex === -1 ? '' : trimmed.slice(commaIndex + 1).trim()
+  // El domicilio del DNI puede venir con coma o con guiones como separador:
+  //   "SAN MARTÍN 2538, CAÑUELAS - BUENOS AIRES"
+  //   "SAN MARTÍN 2538 - CAÑUELAS - BUENOS AIRES"
+  const parts = trimmed.split(/\s*[,-]\s*/).filter(Boolean)
+  const streetPart = (parts[0] ?? '').trim()
+  const city = parts.slice(1).join(' - ').trim()
 
+  // El número es lo que queda al final del primer bloque
   const match = streetPart.match(/^(.*\S)\s+(\d+[a-zA-Z]?)$/)
-  if (match) return { street: match[1].trim(), number: match[2], city }
+  if (!match) return { street: streetPart, number: '', city }
 
-  return { street: streetPart, number: '', city }
+  // Sacamos un "N°" suelto que puede venir pegado al nombre de la calle
+  const street = match[1]
+    .trim()
+    .replace(/\s+(n[°º.]?|nro\.?|núm\.?|numero)$/i, '')
+    .trim()
+
+  return { street, number: match[2], city }
 }
 
 function escapeHtml(value: string): string {
