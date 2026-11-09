@@ -138,7 +138,16 @@ export function TicketEditor() {
       date: new Date(),
     })
 
-    if (!ok) toast.error('No se pudo abrir la impresión (revisá el bloqueador de ventanas)')
+    if (!ok) {
+      toast.error('No se pudo abrir la impresión (revisá el bloqueador de ventanas)')
+      return
+    }
+
+    // Igual que al imprimir un ticket: dejamos el formulario limpio para la próxima venta
+    setSellerDni('')
+    setSellerName('')
+    setSellerAddress('')
+    toast.success('Declaración enviada a imprimir')
   }
 
   const buildTicketItems = (data: FormInput): TicketItem[] =>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Camera, Check, Loader2, RefreshCw, RotateCcw, X } from 'lucide-react'
+import { Camera, Check, Loader2, RefreshCw, RotateCw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useCamera } from '@/hooks/useCamera'
@@ -84,7 +84,7 @@ export function DniScanner({ onClose, onUse }: DniScannerProps) {
             <div className="relative aspect-[4/3] w-full overflow-hidden rounded-md bg-black">
               <video
                 ref={videoRef}
-                className="h-full w-full object-cover"
+                className={`h-full w-full object-cover transition-transform duration-300 ${rotated ? 'rotate-180' : ''}`}
                 muted
                 playsInline
               />
@@ -117,9 +117,9 @@ export function DniScanner({ onClose, onUse }: DniScannerProps) {
                 type="button"
                 variant="outline"
                 onClick={toggleRotation}
-                title="Rotar imagen"
+                title="Rotar 180°"
               >
-                <RotateCcw className={`size-4 ${rotated ? 'rotate-180' : ''}`} />
+                <RotateCw className={`size-4 transition-transform ${rotated ? 'rotate-180 text-primary' : ''}`} />
               </Button>
             </div>
 
