@@ -88,7 +88,9 @@ export function buildDeclarationHtml(data: DeclarationData): string {
 <meta charset="utf-8" />
 <title>Declaración jurada de venta de metales no ferrosos</title>
 <style>
-  @page { size: A4; margin: 18mm 20mm; }
+  /* Margen 0: así el navegador no tiene espacio para imprimir "about:blank" ni 1/1.
+     Los márgenes reales los pone el padding del body. */
+  @page { size: A4; margin: 0; }
   * { box-sizing: border-box; }
   body {
     font-family: Arial, Helvetica, sans-serif;
@@ -97,6 +99,9 @@ export function buildDeclarationHtml(data: DeclarationData): string {
     color: #000;
     margin: 0;
     background: #fff;
+  }
+  @media print {
+    body { padding: 18mm 20mm; }
   }
   /* En pantalla simulamos la hoja A4 con los mismos márgenes del papel */
   @media screen {
